@@ -1,12 +1,18 @@
 import MCP
 
-enum ArgumentConverter {
+final class ArgumentConverter: Sendable {
 
-    static func convert(
+    // MARK: - Private Properties
+
+    private let schemaBuilder = SchemaBuilder()
+
+    // MARK: - Internal Methods
+
+    func convert(
         arguments: [String: Value],
         using argInfos: [DumpArgumentInfo]
     ) -> [String] {
-        let filtered = argInfos.filter { SchemaBuilder.shouldInclude($0) }
+        let filtered = argInfos.filter { schemaBuilder.shouldInclude($0) }
 
         var cliArgs: [String] = []
         var positionalArgs: [(index: Int, value: String)] = []
@@ -49,9 +55,9 @@ enum ArgumentConverter {
         return cliArgs
     }
 
-    // MARK: - Private
+    // MARK: - Private Methods
 
-    private static func cliName(for argument: DumpArgumentInfo) -> String {
+    private func cliName(for argument: DumpArgumentInfo) -> String {
         if let preferred = argument.preferredName {
             return formattedName(preferred)
         }
@@ -61,7 +67,7 @@ enum ArgumentConverter {
         return "--\(argument.valueName ?? "unknown")"
     }
 
-    private static func formattedName(_ nameInfo: DumpNameInfo) -> String {
+    private func formattedName(_ nameInfo: DumpNameInfo) -> String {
         switch nameInfo.kind {
         case .long:
             return "--\(nameInfo.name)"
@@ -72,7 +78,7 @@ enum ArgumentConverter {
         }
     }
 
-    private static func stringValue(from value: Value) -> String {
+    private func stringValue(from value: Value) -> String {
         switch value {
         case .string(let s): s
         case .int(let i): String(i)

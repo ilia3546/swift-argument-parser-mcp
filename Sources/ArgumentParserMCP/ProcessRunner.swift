@@ -1,6 +1,6 @@
 import Foundation
 
-enum ProcessRunner {
+final class ProcessRunner: Sendable {
 
     struct Result: Sendable {
         let stdout: String
@@ -8,7 +8,7 @@ enum ProcessRunner {
         let exitCode: Int32
     }
 
-    static func run(
+    func run(
         executablePath: String,
         arguments: [String]
     ) async throws -> Result {

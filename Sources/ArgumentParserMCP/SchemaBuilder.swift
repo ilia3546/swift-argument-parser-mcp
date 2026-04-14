@@ -1,8 +1,10 @@
 import MCP
 
-enum SchemaBuilder {
+final class SchemaBuilder: Sendable {
 
-    static func buildTool(
+    // MARK: - Internal
+
+    func buildTool(
         from command: DumpCommandInfo,
         description: String
     ) -> Tool {
@@ -35,7 +37,7 @@ enum SchemaBuilder {
         )
     }
 
-    static func toolName(for command: DumpCommandInfo) -> String {
+    func toolName(for command: DumpCommandInfo) -> String {
         var parts = command.superCommands ?? []
         parts.append(command.commandName)
         if parts.count > 1 {
@@ -44,8 +46,9 @@ enum SchemaBuilder {
         return parts.joined(separator: "_")
     }
 
-    static func shouldInclude(_ argument: DumpArgumentInfo) -> Bool {
+    func shouldInclude(_ argument: DumpArgumentInfo) -> Bool {
         guard argument.shouldDisplay else { return false }
+
         if let preferred = argument.preferredName {
             if preferred.name == "help" || preferred.name == "version" {
                 return false
@@ -56,13 +59,14 @@ enum SchemaBuilder {
 
     // MARK: - Private
 
-    private static func propertySchema(for argument: DumpArgumentInfo) -> (String, Value) {
+    func propertySchema(for argument: DumpArgumentInfo) -> (String, Value) {
         let name = parameterName(for: argument)
         var schema: [String: Value] = [:]
 
         switch argument.kind {
         case .flag:
             schema["type"] = .string("boolean")
+
         case .option, .positional:
             if argument.isRepeating {
                 schema["type"] = .string("array")
@@ -84,6 +88,7 @@ enum SchemaBuilder {
             switch argument.kind {
             case .flag:
                 schema["default"] = .bool(defaultValue == "true")
+
             case .option, .positional:
                 schema["default"] = .string(defaultValue)
             }
@@ -103,6 +108,7 @@ func parameterName(for argument: DumpArgumentInfo) -> String {
             return longName.name
         }
         return argument.valueName ?? "unknown"
+
     case .positional:
         return argument.valueName ?? "arg"
     }

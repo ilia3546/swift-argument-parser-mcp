@@ -13,7 +13,7 @@ import ArgumentParser
 /// ```
 public protocol MCPCommand: ParsableCommand {
 
-    /// Custom MCP tool description. When `nil`, the command's `abstract` is used.
+    /// Custom MCP tool description. When `nil`, the command's `abstract + \n + usage` is used.
     static var mcpDescription: String { get }
 
     /// Intercept and transform CLI arguments before execution.

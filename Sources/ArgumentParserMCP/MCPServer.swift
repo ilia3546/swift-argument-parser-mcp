@@ -18,10 +18,17 @@ import MCP
 /// ```
 public struct MCPServer: Sendable {
 
+    // MARK: - Private Properties
+
     private let name: String
     private let version: String
     private let commands: [any MCPCommand.Type]
     private let globalArguments: [String]
+    private let schemaBuilder = SchemaBuilder()
+    private let argumentConverter = ArgumentConverter()
+    private let processRunner = ProcessRunner()
+
+    // MARK: - Initializers
 
     public init(
         name: String,
@@ -35,10 +42,12 @@ public struct MCPServer: Sendable {
         self.globalArguments = globalArguments
     }
 
+    // MARK: - Public Methods
+
     public func start() async throws {
         let executablePath = resolveExecutablePath()
 
-        let dumpResult = try await ProcessRunner.run(
+        let dumpResult = try await processRunner.run(
             executablePath: executablePath,
             arguments: ["--experimental-dump-help"]
         )
@@ -58,7 +67,7 @@ public struct MCPServer: Sendable {
         let registrations = try buildRegistrations(from: toolInfo.command)
 
         let tools = registrations.map { reg in
-            SchemaBuilder.buildTool(
+            schemaBuilder.buildTool(
                 from: reg.commandInfo,
                 description: reg.commandType.mcpDescription
             )
@@ -76,19 +85,19 @@ public struct MCPServer: Sendable {
 
         await server.withMethodHandler(CallTool.self) { params in
             guard let reg = registrations.first(where: {
-                SchemaBuilder.toolName(for: $0.commandInfo) == params.name
+                schemaBuilder.toolName(for: $0.commandInfo) == params.name
             }) else {
                 throw MCPError.invalidParams("Unknown tool: \(params.name)")
             }
 
             let subcommandPath = buildSubcommandPath(for: reg.commandInfo)
-            let cliArgs = ArgumentConverter.convert(
+            let cliArgs = argumentConverter.convert(
                 arguments: params.arguments ?? [:],
                 using: reg.commandInfo.arguments ?? []
             )
             let transformedArgs = reg.commandType.transformArguments(cliArgs)
 
-            let result = try await ProcessRunner.run(
+            let result = try await processRunner.run(
                 executablePath: executablePath,
                 arguments: subcommandPath + transformedArgs + globalArguments
             )
@@ -112,12 +121,7 @@ public struct MCPServer: Sendable {
         await server.waitUntilCompleted()
     }
 
-    // MARK: - Private
-
-    private struct CommandRegistration: Sendable {
-        let commandType: any MCPCommand.Type
-        let commandInfo: DumpCommandInfo
-    }
+    // MARK: - Private Methods
 
     private func resolveExecutablePath() -> String {
         URL(fileURLWithPath: CommandLine.arguments[0]).standardized.path
@@ -160,23 +164,14 @@ public struct MCPServer: Sendable {
     }
 }
 
-public enum MCPServerError: Error, CustomStringConvertible {
+// MARK: - CommandRegistration
 
-    case dumpHelpFailed(stderr: String, exitCode: Int32)
-    case invalidDumpHelpOutput
-    case commandNotFound(String)
-
-    public var description: String {
-        switch self {
-        case .dumpHelpFailed(let stderr, let exitCode):
-            "Failed to dump help (exit code \(exitCode)): \(stderr)"
-        case .invalidDumpHelpOutput:
-            "Could not decode --experimental-dump-help output"
-        case .commandNotFound(let name):
-            "Command '\(name)' not found in CLI tool structure"
-        }
-    }
+private struct CommandRegistration: Sendable {
+    let commandType: any MCPCommand.Type
+    let commandInfo: DumpCommandInfo
 }
+
+// MARK: - String+trimmed
 
 private extension String {
 
