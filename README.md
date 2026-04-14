@@ -163,7 +163,7 @@ let package = Package(
     // name, platforms, products, etc.
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),
-        .package(url: "https://github.com/<owner>/swift-argument-parser-mcp", from: "1.0.0"),
+        .package(url: "https://github.com/ilia3546/swift-argument-parser-mcp", from: "1.0.0"),
     ],
     targets: [
         .executableTarget(name: "<command-line-tool>", dependencies: [
@@ -195,11 +195,11 @@ API documentation is generated automatically from source and hosted by Swift Pac
 
 - [ArgumentParserMCP documentation][docs]
 
-[docs]: https://swiftpackageindex.com/apple/swift-argument-parser-mcp/documentation/argumentparsermcp
+[docs]: https://swiftpackageindex.com/ilia3546/swift-argument-parser-mcp/documentation/argumentparsermcp
 
 ## Requirements
 
-- Swift 6.2+
+- Swift 6.0+
 - macOS 13+
 
 ## License
