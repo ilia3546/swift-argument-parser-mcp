@@ -6,6 +6,10 @@ import MCP
 @Suite("SchemaBuilder")
 struct SchemaBuilderTests {
 
+    // MARK: - Private Properties
+
+    let schemaBuilder = SchemaBuilder()
+
     // MARK: - toolName
 
     @Test func toolNameForSimpleSubcommand() {
@@ -13,7 +17,7 @@ struct SchemaBuilderTests {
             superCommands: ["root"],
             commandName: "repeat-phrase"
         )
-        #expect(SchemaBuilder.toolName(for: command) == "repeat-phrase")
+        #expect(schemaBuilder.toolName(for: command) == "repeat-phrase")
     }
 
     @Test func toolNameForNestedSubcommand() {
@@ -21,12 +25,12 @@ struct SchemaBuilderTests {
             superCommands: ["root", "group"],
             commandName: "sub-action"
         )
-        #expect(SchemaBuilder.toolName(for: command) == "group_sub-action")
+        #expect(schemaBuilder.toolName(for: command) == "group_sub-action")
     }
 
     @Test func toolNameForRootCommand() {
         let command = DumpCommandInfo(commandName: "my-tool")
-        #expect(SchemaBuilder.toolName(for: command) == "my-tool")
+        #expect(schemaBuilder.toolName(for: command) == "my-tool")
     }
 
     // MARK: - shouldInclude
@@ -39,7 +43,7 @@ struct SchemaBuilderTests {
             isRepeating: false,
             preferredName: DumpNameInfo(kind: .long, name: "help")
         )
-        #expect(SchemaBuilder.shouldInclude(help) == false)
+        #expect(schemaBuilder.shouldInclude(help) == false)
     }
 
     @Test func excludesVersionArgument() {
@@ -50,7 +54,7 @@ struct SchemaBuilderTests {
             isRepeating: false,
             preferredName: DumpNameInfo(kind: .long, name: "version")
         )
-        #expect(SchemaBuilder.shouldInclude(version) == false)
+        #expect(schemaBuilder.shouldInclude(version) == false)
     }
 
     @Test func excludesHiddenArgument() {
@@ -61,7 +65,7 @@ struct SchemaBuilderTests {
             isRepeating: false,
             preferredName: DumpNameInfo(kind: .long, name: "secret")
         )
-        #expect(SchemaBuilder.shouldInclude(hidden) == false)
+        #expect(schemaBuilder.shouldInclude(hidden) == false)
     }
 
     @Test func includesRegularArgument() {
@@ -72,7 +76,7 @@ struct SchemaBuilderTests {
             isRepeating: false,
             preferredName: DumpNameInfo(kind: .long, name: "output")
         )
-        #expect(SchemaBuilder.shouldInclude(regular) == true)
+        #expect(schemaBuilder.shouldInclude(regular) == true)
     }
 
     // MARK: - buildTool
@@ -93,7 +97,7 @@ struct SchemaBuilderTests {
             ]
         )
 
-        let tool = SchemaBuilder.buildTool(from: command, description: "Greet someone")
+        let tool = schemaBuilder.buildTool(from: command, description: "Greet someone")
 
         #expect(tool.name == "greet")
         #expect(tool.description == "Greet someone")
@@ -126,7 +130,7 @@ struct SchemaBuilderTests {
             ]
         )
 
-        let tool = SchemaBuilder.buildTool(from: command, description: "Run task")
+        let tool = schemaBuilder.buildTool(from: command, description: "Run task")
         let properties = tool.inputSchema.objectValue!["properties"]!.objectValue!
         let verbose = properties["verbose"]!.objectValue!
 
@@ -155,7 +159,7 @@ struct SchemaBuilderTests {
             ]
         )
 
-        let tool = SchemaBuilder.buildTool(from: command, description: "Export data")
+        let tool = schemaBuilder.buildTool(from: command, description: "Export data")
         let properties = tool.inputSchema.objectValue!["properties"]!.objectValue!
         let format = properties["format"]!.objectValue!
 
@@ -181,7 +185,7 @@ struct SchemaBuilderTests {
             ]
         )
 
-        let tool = SchemaBuilder.buildTool(from: command, description: "Process items")
+        let tool = schemaBuilder.buildTool(from: command, description: "Process items")
         let properties = tool.inputSchema.objectValue!["properties"]!.objectValue!
         let tag = properties["tag"]!.objectValue!
 
@@ -219,7 +223,7 @@ struct SchemaBuilderTests {
             ]
         )
 
-        let tool = SchemaBuilder.buildTool(from: command, description: "Cmd")
+        let tool = schemaBuilder.buildTool(from: command, description: "Cmd")
         let properties = tool.inputSchema.objectValue!["properties"]!.objectValue!
 
         #expect(properties["help"] == nil)
@@ -233,7 +237,7 @@ struct SchemaBuilderTests {
             commandName: "ping"
         )
 
-        let tool = SchemaBuilder.buildTool(from: command, description: "Ping")
+        let tool = schemaBuilder.buildTool(from: command, description: "Ping")
         let schema = tool.inputSchema.objectValue!
 
         #expect(schema["properties"]?.objectValue?.isEmpty == true)
@@ -271,7 +275,7 @@ struct SchemaBuilderTests {
             ]
         )
 
-        let tool = SchemaBuilder.buildTool(from: command, description: "Deploy")
+        let tool = schemaBuilder.buildTool(from: command, description: "Deploy")
         let schema = tool.inputSchema.objectValue!
         let properties = schema["properties"]!.objectValue!
 
@@ -301,7 +305,7 @@ struct SchemaBuilderTests {
             ]
         )
 
-        let tool = SchemaBuilder.buildTool(from: command, description: "Cmd")
+        let tool = schemaBuilder.buildTool(from: command, description: "Cmd")
         let properties = tool.inputSchema.objectValue!["properties"]!.objectValue!
         let force = properties["force"]!.objectValue!
 

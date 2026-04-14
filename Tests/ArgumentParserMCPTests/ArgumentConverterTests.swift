@@ -8,6 +8,10 @@ struct ArgumentConverterTests {
 
     // MARK: - Flags
 
+    private let argumentConverter = ArgumentConverter()
+
+    // MARK: - Flags
+
     @Test func convertsFlagTrue() {
         let args: [String: Value] = ["verbose": .bool(true)]
         let infos = [
@@ -20,7 +24,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["--verbose"])
     }
 
@@ -36,7 +40,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result.isEmpty)
     }
 
@@ -52,7 +56,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result.isEmpty)
     }
 
@@ -70,7 +74,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["--output", "/tmp/out.txt"])
     }
 
@@ -86,7 +90,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["--count", "5"])
     }
 
@@ -102,7 +106,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["-n", "3"])
     }
 
@@ -120,7 +124,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["--tag", "alpha", "--tag", "beta"])
     }
 
@@ -138,7 +142,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["input.txt"])
     }
 
@@ -156,7 +160,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["a.txt", "b.txt"])
     }
 
@@ -192,7 +196,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
 
         // Flags and options first, then positionals
         #expect(result == ["--include-counter", "--count", "3", "hello"])
@@ -220,7 +224,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["src.txt", "dst.txt"])
     }
 
@@ -248,7 +252,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["world"])
     }
 
@@ -274,14 +278,14 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["test"])
     }
 
     // MARK: - Empty input
 
     @Test func emptyArgumentsProducesEmptyResult() {
-        let result = ArgumentConverter.convert(arguments: [:], using: [])
+        let result = argumentConverter.convert(arguments: [:], using: [])
         #expect(result.isEmpty)
     }
 
@@ -299,7 +303,7 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = ArgumentConverter.convert(arguments: args, using: infos)
+        let result = argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["-verbose"])
     }
 }
