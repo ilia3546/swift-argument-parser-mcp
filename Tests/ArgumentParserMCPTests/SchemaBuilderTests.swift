@@ -136,6 +136,7 @@ struct SchemaBuilderTests {
 
         #expect(verbose["type"]?.stringValue == "boolean")
         #expect(verbose["description"]?.stringValue == "Enable verbose output.")
+        #expect(verbose["default"]?.boolValue == false)
 
         // Flag is optional, so required should be absent
         #expect(tool.inputSchema.objectValue!["required"] == nil)
@@ -284,6 +285,7 @@ struct SchemaBuilderTests {
         #expect(properties["environment"]?.objectValue?["type"]?.stringValue == "string")
         #expect(properties["environment"]?.objectValue?["default"]?.stringValue == "staging")
         #expect(properties["dry-run"]?.objectValue?["type"]?.stringValue == "boolean")
+        #expect(properties["dry-run"]?.objectValue?["default"]?.boolValue == false)
 
         let required = schema["required"]!.arrayValue!.compactMap(\.stringValue)
         #expect(required == ["target"])

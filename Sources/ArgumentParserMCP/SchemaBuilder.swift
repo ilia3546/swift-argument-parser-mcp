@@ -84,12 +84,12 @@ final class SchemaBuilder: Sendable {
             schema["enum"] = .array(allValues.map { .string($0) })
         }
 
-        if let defaultValue = argument.defaultValue {
-            switch argument.kind {
-            case .flag:
-                schema["default"] = .bool(defaultValue == "true")
+        switch argument.kind {
+        case .flag:
+            schema["default"] = .bool(argument.defaultValue == "true")
 
-            case .option, .positional:
+        case .option, .positional:
+            if let defaultValue = argument.defaultValue {
                 schema["default"] = .string(defaultValue)
             }
         }

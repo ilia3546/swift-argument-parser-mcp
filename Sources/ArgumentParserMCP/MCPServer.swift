@@ -45,7 +45,7 @@ public struct MCPServer: Sendable {
     // MARK: - Public Methods
 
     public func start() async throws {
-        let executablePath = resolveExecutablePath()
+        let executablePath = try resolveExecutablePath()
 
         let dumpResult = try await processRunner.run(
             executablePath: executablePath,
@@ -123,8 +123,22 @@ public struct MCPServer: Sendable {
 
     // MARK: - Private Methods
 
-    private func resolveExecutablePath() -> String {
-        URL(fileURLWithPath: CommandLine.arguments[0]).standardized.path
+    private func resolveExecutablePath() throws -> String {
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+#if canImport(Darwin)
+        var pathLength = UInt32(buffer.count)
+        guard _NSGetExecutablePath(&buffer, &pathLength) == 0 else {
+            throw MCPServerError.unableToDetectCurrentExecutablePath
+        }
+#else
+        let length = readlink("/proc/self/exe", &buffer, buffer.count - 1)
+        guard length > 0 else {
+            throw MCPServerError.unableToDetectCurrentExecutablePath
+        }
+        buffer[Int(length)] = 0
+#endif
+        let endIndex = buffer.firstIndex(of: 0) ?? buffer.endIndex
+        return buffer[..<endIndex].withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
     }
 
     private func buildRegistrations(
