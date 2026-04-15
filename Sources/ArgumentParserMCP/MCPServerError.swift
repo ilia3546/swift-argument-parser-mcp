@@ -5,6 +5,7 @@ public enum MCPServerError: Error, CustomStringConvertible {
     case dumpHelpFailed(stderr: String, exitCode: Int32)
     case invalidDumpHelpOutput
     case commandNotFound(String)
+    case unableToDetectCurrentExecutablePath
 
     public var description: String {
         switch self {
@@ -16,6 +17,9 @@ public enum MCPServerError: Error, CustomStringConvertible {
 
         case .commandNotFound(let name):
             "Command '\(name)' not found in CLI tool structure"
+
+        case .unableToDetectCurrentExecutablePath:
+            "Unable to detect current executable path"
         }
     }
 }
