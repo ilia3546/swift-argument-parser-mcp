@@ -22,6 +22,8 @@ public struct MCPServer: Sendable {
 
     private let name: String
     private let version: String
+    private let instructions: String?
+    private let isStrict: Bool
     private let commands: [any MCPCommand.Type]
     private let globalArguments: [String]
     private let schemaBuilder = SchemaBuilder()
@@ -30,20 +32,58 @@ public struct MCPServer: Sendable {
 
     // MARK: - Initializers
 
+    /// Creates a new ``MCPServer``.
+    ///
+    /// - Parameters:
+    ///   - name: The server name exposed to MCP clients.
+    ///   - version: The server version string exposed to MCP clients.
+    ///   - commands: The ``MCPCommand``-conforming types to register as MCP tools.
+    ///   - instructions: Optional guidance passed to MCP clients at the server level,
+    ///     such as usage hints or context about the available tools.
+    ///   - isStrict: When `true`, the underlying MCP server uses strict protocol validation.
+    ///     Defaults to `false`.
+    ///   - globalArguments: Arguments appended to every subprocess invocation.
+    ///     Use this to pass flags such as `--verbose` or `--config-path` to all commands.
     public init(
         name: String,
         version: String,
         commands: [any MCPCommand.Type],
+        instructions: String? = nil,
+        isStrict: Bool = false,
         globalArguments: [String] = []
     ) {
         self.name = name
         self.version = version
         self.commands = commands
+        self.instructions = instructions
+        self.isStrict = isStrict
         self.globalArguments = globalArguments
     }
 
     // MARK: - Public Methods
 
+    /// Starts the MCP server and blocks until the connection is closed.
+    ///
+    /// On startup the server performs the following steps:
+    /// 1. Resolves the path of the running binary using a platform-native API
+    ///    (`_NSGetExecutablePath` on Darwin, `/proc/self/exe` on Linux).
+    /// 2. Introspects the CLI by invoking the binary with `--experimental-dump-help`
+    ///    and parsing the resulting JSON.
+    /// 3. Builds an MCP ``Tool`` definition for every registered ``MCPCommand``,
+    ///    generating a JSON Schema `inputSchema` from its arguments, options, and flags.
+    /// 4. Listens for `tools/list` and `tools/call` requests over stdio.
+    ///
+    /// When a tool is called the server converts the JSON arguments back to CLI arguments
+    /// and invokes the appropriate subcommand as a child process, returning its stdout as
+    /// the tool result (or stderr on non-zero exit).
+    ///
+    /// - Throws: ``MCPServerError/unableToDetectCurrentExecutablePath`` if the path of the
+    ///   running binary cannot be determined.
+    /// - Throws: ``MCPServerError/dumpHelpFailed(stderr:exitCode:)`` if the
+    ///   `--experimental-dump-help` invocation exits with a non-zero status.
+    /// - Throws: ``MCPServerError/invalidDumpHelpOutput`` if the help output cannot be decoded.
+    /// - Throws: ``MCPServerError/commandNotFound(_:)`` if a registered command is not
+    ///   present in the CLI's command tree.
     public func start() async throws {
         let executablePath = try resolveExecutablePath()
 
@@ -76,11 +116,15 @@ public struct MCPServer: Sendable {
         let server = Server(
             name: name,
             version: version,
-            capabilities: .init(tools: .init(listChanged: false))
+            instructions: instructions,
+            capabilities: Server.Capabilities(
+                tools: Server.Capabilities.Tools(listChanged: false)
+            ),
+            configuration: isStrict ? .strict : .default
         )
 
         await server.withMethodHandler(ListTools.self) { _ in
-            .init(tools: tools)
+            ListTools.Result(tools: tools)
         }
 
         await server.withMethodHandler(CallTool.self) { params in
@@ -104,14 +148,14 @@ public struct MCPServer: Sendable {
 
             if result.exitCode != 0 {
                 let errorOutput = result.stderr.isEmpty ? result.stdout : result.stderr
-                return .init(
+                return CallTool.Result(
                     content: [.text(text: errorOutput.trimmed, annotations: nil, _meta: nil)],
                     isError: true
                 )
             }
 
             let output = result.stdout.trimmed
-            return .init(
+            return CallTool.Result(
                 content: [.text(text: output.isEmpty ? "(no output)" : output, annotations: nil, _meta: nil)]
             )
         }

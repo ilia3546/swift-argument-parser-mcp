@@ -13,7 +13,7 @@ import ArgumentParser
 /// ```
 public protocol MCPCommand: ParsableCommand {
 
-    /// Custom MCP tool description. When `nil`, the command's `abstract + \n + usage` is used.
+    /// Custom MCP tool description. When `nil`, the command's `abstract + \n + discussion` is used.
     static var mcpDescription: String { get }
 
     /// Intercept and transform CLI arguments before execution.
@@ -34,7 +34,7 @@ public protocol MCPCommand: ParsableCommand {
 extension MCPCommand {
 
     public static var mcpDescription: String {
-        [configuration.abstract, configuration.usage]
+        [configuration.abstract, configuration.discussion]
             .compactMap({ $0 })
             .joined(separator: "\n")
     }
