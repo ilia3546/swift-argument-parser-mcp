@@ -147,9 +147,12 @@ public struct MCPServer: Sendable {
             )
 
             if result.exitCode != 0 {
-                let errorOutput = result.stderr.isEmpty ? result.stdout : result.stderr
+                let parts = [result.stdout, result.stderr]
+                    .map { $0.trimmed }
+                    .filter { !$0.isEmpty }
+                let errorOutput = parts.isEmpty ? "(no output)" : parts.joined(separator: "\n")
                 return CallTool.Result(
-                    content: [.text(text: errorOutput.trimmed, annotations: nil, _meta: nil)],
+                    content: [.text(text: errorOutput, annotations: nil, _meta: nil)],
                     isError: true
                 )
             }
