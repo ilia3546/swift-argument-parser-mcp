@@ -115,7 +115,7 @@ AI Agent ──stdio──> my-cli mcp (MCPServer)
 
 ### Custom Tool Descriptions
 
-By default, the MCP tool description is built from `CommandConfiguration.abstract` and `.usage`.
+By default, the MCP tool description is built from `CommandConfiguration.abstract` and `.discussion`.
 Override `mcpDescription` for a custom one:
 
 ```swift
