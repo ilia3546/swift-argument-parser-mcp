@@ -231,7 +231,7 @@ func makeCallToolResult(from result: ProcessRunner.Result) -> CallTool.Result {
     let trimmedLog = result.mergedLog.trimmingCharacters(in: .whitespacesAndNewlines)
     let textBlock = trimmedLog.isEmpty ? "(no output)" : trimmedLog
 
-    let structured: Value = .object([
+    let structured: Value? = .object([
         "stdout": .string(result.stdout),
         "stderr": .string(result.stderr),
         "exitCode": .int(Int(result.exitCode)),
