@@ -24,6 +24,7 @@ struct MCP: AsyncParsableCommand {
                 Sleep.self,
                 Fail.self,
             ],
+            instructions: "Sample CLI demonstrating ArgumentParserMCP. Use it to verify MCP integrations end-to-end.",
             outputCapBytes: 8 * 1024
         )
         try await server.start()
