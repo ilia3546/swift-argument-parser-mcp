@@ -24,17 +24,6 @@ struct MCP: AsyncParsableCommand {
                 Sleep.self,
                 Fail.self,
             ],
-            instructions: """
-                demo-cli is a sample CLI built with ArgumentParserMCP. It exposes a variety of \
-                subcommands so MCP clients can verify the plumbing end-to-end. Use `tools/list` \
-                to discover what is available; every tool description is generated from its \
-                CommandConfiguration.
-
-                Each tool result includes a human-readable text block plus a `structuredContent` \
-                object with `stdout`, `stderr`, `exitCode`, `terminationReason`, \
-                `stdoutTruncated`, `stderrTruncated`, and `durationMs`. `isError` is set when \
-                the child exits non-zero or is killed.
-                """,
             outputCapBytes: 8 * 1024
         )
         try await server.start()
