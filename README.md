@@ -101,7 +101,7 @@ AI Agent ──stdio──> my-cli mcp (MCPServer)
                        |── tools/list  -> tool definitions from --experimental-dump-help
                        |
                        └── tools/call  -> my-cli repeat-phrase --count 3 "hello"
-                                          captures stdout, returns as text
+                                          merged log + structured result
 ```
 
 1. On startup, `MCPServer` runs the current executable with `--experimental-dump-help`
@@ -110,6 +110,40 @@ AI Agent ──stdio──> my-cli mcp (MCPServer)
    derived from the command's arguments, options, and flags.
 3. When an agent calls a tool, the server converts JSON arguments back to CLI arguments
    and invokes the appropriate subcommand as a child process.
+
+### Tool Call Result
+
+Every tool call produces two parallel views of the subprocess output:
+
+- A human-readable **text content block** with stdout and stderr interleaved in
+  best-effort line-arrival order. Lines that came from stderr are prefixed with
+  `[stderr] ` so they remain distinguishable in the merged form.
+- A **`structuredContent`** object for programmatic consumption:
+
+  ```json
+  {
+    "stdout": "...",
+    "stderr": "...",
+    "exitCode": 0,
+    "terminationReason": "exit",
+    "stdoutTruncated": false,
+    "stderrTruncated": false,
+    "durationMs": 42
+  }
+  ```
+
+  `terminationReason` is `"exit"` for a normal exit or `"uncaughtSignal"` if the
+  child was killed. `isError` is set when the process exits non-zero or is killed.
+
+Captured output is capped per stream (default 256 KiB) to keep large outputs
+from blowing up the agent's context. When the cap is hit the relevant
+`*Truncated` flag is set. Adjust via the `outputCapBytes` parameter on
+`MCPServer.init`.
+
+> The merged log approximates what a developer would see in a terminal, not
+> the exact write order at the source — pipe and libc buffering on the
+> child's side mean order is best-effort. For strict checks, use
+> `structuredContent.exitCode` and the raw `stdout` / `stderr` fields.
 
 ## Customization
 

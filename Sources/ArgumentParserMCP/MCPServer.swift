@@ -26,6 +26,7 @@ public struct MCPServer: Sendable {
     private let isStrict: Bool
     private let commands: [any MCPCommand.Type]
     private let globalArguments: [String]
+    private let outputCapBytes: Int
     private let schemaBuilder = SchemaBuilder()
     private let argumentConverter = ArgumentConverter()
     private let processRunner = ProcessRunner()
@@ -44,13 +45,17 @@ public struct MCPServer: Sendable {
     ///     Defaults to `false`.
     ///   - globalArguments: Arguments appended to every subprocess invocation.
     ///     Use this to pass flags such as `--verbose` or `--config-path` to all commands.
+    ///   - outputCapBytes: Maximum number of bytes captured per stream (stdout / stderr)
+    ///     for tool-call results. Output beyond the cap is dropped and the result's
+    ///     `stdoutTruncated` / `stderrTruncated` fields are set. Defaults to 256 KiB.
     public init(
         name: String,
         version: String,
         commands: [any MCPCommand.Type],
         instructions: String? = nil,
         isStrict: Bool = false,
-        globalArguments: [String] = []
+        globalArguments: [String] = [],
+        outputCapBytes: Int = 256 * 1024
     ) {
         self.name = name
         self.version = version
@@ -58,6 +63,7 @@ public struct MCPServer: Sendable {
         self.instructions = instructions
         self.isStrict = isStrict
         self.globalArguments = globalArguments
+        self.outputCapBytes = outputCapBytes
     }
 
     // MARK: - Public Methods
@@ -143,24 +149,11 @@ public struct MCPServer: Sendable {
 
             let result = try await processRunner.run(
                 executablePath: executablePath,
-                arguments: subcommandPath + transformedArgs + globalArguments
+                arguments: subcommandPath + transformedArgs + globalArguments,
+                perStreamCapBytes: outputCapBytes
             )
 
-            if result.exitCode != 0 {
-                let parts = [result.stdout, result.stderr]
-                    .map { $0.trimmed }
-                    .filter { !$0.isEmpty }
-                let errorOutput = parts.isEmpty ? "(no output)" : parts.joined(separator: "\n")
-                return CallTool.Result(
-                    content: [.text(text: errorOutput, annotations: nil, _meta: nil)],
-                    isError: true
-                )
-            }
-
-            let output = result.stdout.trimmed
-            return CallTool.Result(
-                content: [.text(text: output.isEmpty ? "(no output)" : output, annotations: nil, _meta: nil)]
-            )
+            return makeCallToolResult(from: result)
         }
 
         let transport = StdioTransport()
@@ -232,11 +225,27 @@ private struct CommandRegistration: Sendable {
     let commandInfo: DumpCommandInfo
 }
 
-// MARK: - String+trimmed
+// MARK: - Result formatting
 
-private extension String {
+func makeCallToolResult(from result: ProcessRunner.Result) -> CallTool.Result {
+    let trimmedLog = result.mergedLog.trimmingCharacters(in: .whitespacesAndNewlines)
+    let textBlock = trimmedLog.isEmpty ? "(no output)" : trimmedLog
 
-    var trimmed: String {
-        trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    let structured: Value = .object([
+        "stdout": .string(result.stdout),
+        "stderr": .string(result.stderr),
+        "exitCode": .int(Int(result.exitCode)),
+        "terminationReason": .string(result.terminationReason.rawValue),
+        "stdoutTruncated": .bool(result.stdoutTruncated),
+        "stderrTruncated": .bool(result.stderrTruncated),
+        "durationMs": .int(result.durationMs),
+    ])
+
+    let isError = result.terminationReason != .exit || result.exitCode != 0
+
+    return CallTool.Result(
+        content: [.text(text: textBlock, annotations: nil, _meta: nil)],
+        structuredContent: structured,
+        isError: isError
+    )
 }
