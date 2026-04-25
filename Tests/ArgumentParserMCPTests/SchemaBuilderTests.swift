@@ -313,4 +313,248 @@ struct SchemaBuilderTests {
 
         #expect(force["default"]?.boolValue == false)
     }
+
+    // MARK: - Type Inference
+
+    @Test func optionWithIntegerDefaultUsesIntegerType() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "run",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "count"),
+                    defaultValue: "2"
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Run")
+        let count = tool.inputSchema.objectValue!["properties"]!.objectValue!["count"]!.objectValue!
+
+        #expect(count["type"]?.stringValue == "integer")
+        #expect(count["default"]?.intValue == 2)
+    }
+
+    @Test func optionWithFloatDefaultUsesNumberType() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "scale",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "ratio"),
+                    defaultValue: "1.5"
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Scale")
+        let ratio = tool.inputSchema.objectValue!["properties"]!.objectValue!["ratio"]!.objectValue!
+
+        #expect(ratio["type"]?.stringValue == "number")
+        #expect(ratio["default"]?.doubleValue == 1.5)
+    }
+
+    @Test func optionWithBooleanDefaultUsesBooleanType() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "build",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "cached"),
+                    defaultValue: "true"
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Build")
+        let cached = tool.inputSchema.objectValue!["properties"]!.objectValue!["cached"]!.objectValue!
+
+        #expect(cached["type"]?.stringValue == "boolean")
+        #expect(cached["default"]?.boolValue == true)
+    }
+
+    @Test func optionWithStringDefaultStaysString() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "deploy",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "environment"),
+                    defaultValue: "staging"
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Deploy")
+        let env = tool.inputSchema.objectValue!["properties"]!.objectValue!["environment"]!.objectValue!
+
+        #expect(env["type"]?.stringValue == "string")
+        #expect(env["default"]?.stringValue == "staging")
+    }
+
+    @Test func optionWithoutDefaultStaysString() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "run",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "count")
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Run")
+        let count = tool.inputSchema.objectValue!["properties"]!.objectValue!["count"]!.objectValue!
+
+        #expect(count["type"]?.stringValue == "string")
+        #expect(count["default"] == nil)
+    }
+
+    @Test func optionWithIntegerEnumValuesUsesIntegerType() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "config",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "level"),
+                    defaultValue: "1",
+                    allValues: ["0", "1", "2", "3"]
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Config")
+        let level = tool.inputSchema.objectValue!["properties"]!.objectValue!["level"]!.objectValue!
+
+        #expect(level["type"]?.stringValue == "integer")
+        #expect(level["default"]?.intValue == 1)
+
+        let enumValues = level["enum"]!.arrayValue!.compactMap(\.intValue)
+        #expect(enumValues == [0, 1, 2, 3])
+    }
+
+    @Test func optionWithMixedEnumValuesFallsBackToString() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "config",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "mode"),
+                    defaultValue: "auto",
+                    allValues: ["auto", "1", "2"]
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Config")
+        let mode = tool.inputSchema.objectValue!["properties"]!.objectValue!["mode"]!.objectValue!
+
+        #expect(mode["type"]?.stringValue == "string")
+        #expect(mode["default"]?.stringValue == "auto")
+
+        let enumValues = mode["enum"]!.arrayValue!.compactMap(\.stringValue)
+        #expect(enumValues == ["auto", "1", "2"])
+    }
+
+    @Test func repeatingOptionInheritsInferredItemType() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "ports",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: true,
+                    preferredName: DumpNameInfo(kind: .long, name: "port"),
+                    allValues: ["80", "443", "8080"]
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Ports")
+        let port = tool.inputSchema.objectValue!["properties"]!.objectValue!["port"]!.objectValue!
+
+        #expect(port["type"]?.stringValue == "array")
+        #expect(port["items"]?.objectValue?["type"]?.stringValue == "integer")
+
+        let enumValues = port["enum"]!.arrayValue!.compactMap(\.intValue)
+        #expect(enumValues == [80, 443, 8080])
+    }
+
+    @Test func positionalWithNumericDefaultUsesNumberType() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "wait",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .positional,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    valueName: "seconds",
+                    defaultValue: "0.25"
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Wait")
+        let seconds = tool.inputSchema.objectValue!["properties"]!.objectValue!["seconds"]!.objectValue!
+
+        #expect(seconds["type"]?.stringValue == "number")
+        #expect(seconds["default"]?.doubleValue == 0.25)
+    }
+
+    @Test func enumValuesPreferIntegerOverNumber() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "cmd",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "value"),
+                    allValues: ["1", "2", "3"]
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Cmd")
+        let value = tool.inputSchema.objectValue!["properties"]!.objectValue!["value"]!.objectValue!
+
+        #expect(value["type"]?.stringValue == "integer")
+
+        let enumValues = value["enum"]!.arrayValue!.compactMap(\.intValue)
+        #expect(enumValues == [1, 2, 3])
+    }
 }

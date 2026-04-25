@@ -63,6 +63,8 @@ final class SchemaBuilder: Sendable {
         let name = parameterName(for: argument)
         var schema: [String: Value] = [:]
 
+        let inferredType = inferType(for: argument)
+
         switch argument.kind {
         case .flag:
             schema["type"] = .string("boolean")
@@ -70,9 +72,9 @@ final class SchemaBuilder: Sendable {
         case .option, .positional:
             if argument.isRepeating {
                 schema["type"] = .string("array")
-                schema["items"] = .object(["type": .string("string")])
+                schema["items"] = .object(["type": .string(inferredType.schemaTypeName)])
             } else {
-                schema["type"] = .string("string")
+                schema["type"] = .string(inferredType.schemaTypeName)
             }
         }
 
@@ -80,8 +82,8 @@ final class SchemaBuilder: Sendable {
             schema["description"] = .string(abstract)
         }
 
-        if let allValues = argument.allValues, !allValues.isEmpty {
-            schema["enum"] = .array(allValues.map { .string($0) })
+        if let enumValues = enumValues(for: argument, type: inferredType) {
+            schema["enum"] = .array(enumValues)
         }
 
         switch argument.kind {
@@ -89,12 +91,83 @@ final class SchemaBuilder: Sendable {
             schema["default"] = .bool(argument.defaultValue == "true")
 
         case .option, .positional:
-            if let defaultValue = argument.defaultValue {
-                schema["default"] = .string(defaultValue)
+            if let defaultValue = defaultSchemaValue(for: argument, type: inferredType) {
+                schema["default"] = defaultValue
             }
         }
 
         return (name, .object(schema))
+    }
+
+    func inferType(for argument: DumpArgumentInfo) -> InferredType {
+        if argument.kind == .flag {
+            return .boolean
+        }
+
+        if let allValues = argument.allValues, !allValues.isEmpty {
+            return uniformType(of: allValues) ?? .string
+        }
+
+        if let defaultValue = argument.defaultValue {
+            return scalarType(of: defaultValue) ?? .string
+        }
+
+        return .string
+    }
+
+    private func enumValues(for argument: DumpArgumentInfo, type: InferredType) -> [Value]? {
+        guard let allValues = argument.allValues, !allValues.isEmpty else { return nil }
+        return allValues.map { schemaValue(from: $0, as: type) }
+    }
+
+    private func defaultSchemaValue(for argument: DumpArgumentInfo, type: InferredType) -> Value? {
+        guard let raw = argument.defaultValue else { return nil }
+        return schemaValue(from: raw, as: type)
+    }
+
+    private func schemaValue(from raw: String, as type: InferredType) -> Value {
+        switch type {
+        case .integer:
+            if let intValue = Int(raw) { return .int(intValue) }
+        case .number:
+            if let doubleValue = Double(raw) { return .double(doubleValue) }
+        case .boolean:
+            if raw == "true" { return .bool(true) }
+            if raw == "false" { return .bool(false) }
+        case .string:
+            break
+        }
+        return .string(raw)
+    }
+
+    private func uniformType(of values: [String]) -> InferredType? {
+        if values.allSatisfy({ Int($0) != nil }) { return .integer }
+        if values.allSatisfy({ Double($0) != nil }) { return .number }
+        if values.allSatisfy({ $0 == "true" || $0 == "false" }) { return .boolean }
+        return nil
+    }
+
+    private func scalarType(of value: String) -> InferredType? {
+        if Int(value) != nil { return .integer }
+        if Double(value) != nil { return .number }
+        if value == "true" || value == "false" { return .boolean }
+        return nil
+    }
+}
+
+enum InferredType: Sendable {
+    case string
+    case integer
+    case number
+    case boolean
+
+    var schemaTypeName: String {
+        switch self {
+        case .string: return "string"
+        case .integer: return "integer"
+        case .number: return "number"
+        case .boolean: return "boolean"
+        }
     }
 }
 
