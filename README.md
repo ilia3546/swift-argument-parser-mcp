@@ -1,5 +1,11 @@
 # Swift Argument Parser MCP
 
+[![CI](https://github.com/ilia3546/swift-argument-parser-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ilia3546/swift-argument-parser-mcp/actions/workflows/ci.yml)
+[![Swift](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Filia3546%2Fswift-argument-parser-mcp%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/ilia3546/swift-argument-parser-mcp)
+[![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Filia3546%2Fswift-argument-parser-mcp%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/ilia3546/swift-argument-parser-mcp)
+[![Documentation](https://img.shields.io/badge/documentation-SPI-blue)](https://swiftpackageindex.com/ilia3546/swift-argument-parser-mcp/documentation)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 **Turn any Swift CLI into an MCP server in minutes.**
 
 ArgumentParserMCP lets AI agents call your [Swift Argument Parser][sap] commands
