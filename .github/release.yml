@@ -1,0 +1,47 @@
+# Configuration for GitHub's auto-generated release notes.
+# Docs: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+#
+# PRs are grouped by label. The label set mirrors the branch / PR-title
+# types defined in CONTRIBUTING.md → "Commit & PR conventions". Apply one
+# label per PR matching its title prefix; add `breaking` on top for
+# breaking changes.
+
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+    authors:
+      - dependabot
+      - dependabot[bot]
+  categories:
+    - title: Breaking Changes
+      labels:
+        - breaking
+    - title: Features
+      labels:
+        - feature
+    - title: Bug Fixes
+      labels:
+        - fix
+    - title: Performance
+      labels:
+        - perf
+    - title: Refactoring
+      labels:
+        - refactor
+    - title: Documentation
+      labels:
+        - docs
+    - title: Tests
+      labels:
+        - test
+    - title: Build & CI
+      labels:
+        - ci
+        - build
+    - title: Chores
+      labels:
+        - chore
+    - title: Other Changes
+      labels:
+        - "*"
