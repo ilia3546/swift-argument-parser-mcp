@@ -242,8 +242,6 @@ API documentation is generated automatically from source and hosted by Swift Pac
 - Swift 6.0+
 - macOS 13+ or Linux
 
-Linux is exercised in CI against Swift 6.0 and 6.1 on Ubuntu Jammy.
-
 ## License
 
 This library is released under the Apache 2.0 license. See [LICENSE](LICENSE) for details.
