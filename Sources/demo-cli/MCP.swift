@@ -12,8 +12,20 @@ struct MCP: AsyncParsableCommand {
             name: "demo-cli",
             version: ArgumentParserMCPDemo.configuration.version,
             commands: [
-                RepeatPhrase.self
-            ]
+                RepeatPhrase.self,
+                Greet.self,
+                Tag.self,
+                MathAdd.self,
+                MathMultiply.self,
+                Echo.self,
+                Deploy.self,
+                Noisy.self,
+                Flood.self,
+                Sleep.self,
+                Fail.self,
+            ],
+            instructions: "Sample CLI demonstrating ArgumentParserMCP. Use it to verify MCP integrations end-to-end.",
+            outputCapBytes: 8 * 1024
         )
         try await server.start()
     }
