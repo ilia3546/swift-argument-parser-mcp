@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 /// End-to-end MCP protocol tests.
