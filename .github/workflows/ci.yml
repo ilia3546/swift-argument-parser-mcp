@@ -29,9 +29,11 @@ jobs:
 
       - name: Build
         run: swift build
+        timeout-minutes: 10
 
       - name: Run tests
         run: swift test
+        timeout-minutes: 10
 
   linux:
     name: Linux (Swift ${{ matrix.swift }})
@@ -50,6 +52,8 @@ jobs:
 
       - name: Build
         run: swift build
+        timeout-minutes: 10
 
       - name: Run tests
         run: swift test
+        timeout-minutes: 10
