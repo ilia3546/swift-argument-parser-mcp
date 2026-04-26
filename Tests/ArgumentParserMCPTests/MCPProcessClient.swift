@@ -24,6 +24,16 @@ final class MCPProcessClient: @unchecked Sendable {
         func snapshot() -> String { String(decoding: data, as: UTF8.self) }
     }
 
+    /// One-shot signal raised by the timeout task before it force-closes
+    /// stdout. The reader checks it when `availableData` returns empty so
+    /// it can report a `.timeout` (with the captured stderr) instead of a
+    /// misleading `.endOfStream` — both tasks are racing to throw, and
+    /// without this flag whichever one wins changes the error type.
+    private actor TimeoutGate {
+        private(set) var fired = false
+        func fire() { fired = true }
+    }
+
     // MARK: - Private Properties
 
     private let process: Process
@@ -164,6 +174,7 @@ final class MCPProcessClient: @unchecked Sendable {
         matchingID id: Int,
         timeout: TimeInterval
     ) async throws -> [String: Any] {
+        let gate = TimeoutGate()
         // `[String: Any]` isn't `Sendable`, so the value is shuttled out of the
         // task group inside an unchecked-Sendable wrapper.
         let box = try await withThrowingTaskGroup(of: ResponseBox.self) { group in
@@ -179,9 +190,21 @@ final class MCPProcessClient: @unchecked Sendable {
                     try Task.checkCancellation()
                     let chunk = try await readChunk()
                     if chunk.isEmpty {
+                        let stderr = await stderrCapture.snapshot()
+                        let isRunning = process.isRunning
+                        let exitCode = isRunning ? nil : process.terminationStatus
+                        if await gate.fired {
+                            throw MCPClientError.timeout(
+                                method: "id=\(id)",
+                                stderr: stderr,
+                                isProcessRunning: isRunning,
+                                exitCode: exitCode
+                            )
+                        }
                         throw MCPClientError.endOfStream(
-                            isProcessRunning: process.isRunning,
-                            exitCode: process.isRunning ? nil : process.terminationStatus
+                            stderr: stderr,
+                            isProcessRunning: isRunning,
+                            exitCode: exitCode
                         )
                     }
                     stdoutBuffer.append(chunk)
@@ -192,7 +215,10 @@ final class MCPProcessClient: @unchecked Sendable {
                 // Force-close stdout so the reader's blocking pipe read
                 // returns immediately. Without this, group.cancelAll() can't
                 // unblock a `FileHandle.availableData` running on a dispatch
-                // queue and the task group deadlocks.
+                // queue and the task group deadlocks. Raise the gate first
+                // so the reader, which will likely wake up before this task
+                // throws, knows the EOF is artificial.
+                await gate.fire()
                 try? stdout.close()
                 throw MCPClientError.timeout(
                     method: "id=\(id)",
@@ -302,7 +328,7 @@ enum MCPClientError: Error, CustomStringConvertible {
     // MARK: - Cases
 
     case timeout(method: String, stderr: String, isProcessRunning: Bool, exitCode: Int32?)
-    case endOfStream(isProcessRunning: Bool, exitCode: Int32?)
+    case endOfStream(stderr: String, isProcessRunning: Bool, exitCode: Int32?)
     case executableNotFound(String)
     case missingField(String)
     case wrongType(field: String, expected: String)
@@ -319,9 +345,14 @@ enum MCPClientError: Error, CustomStringConvertible {
             Timed out waiting for MCP response (\(method)); running=\(running) exitCode=\(exit)
             stderr=\(stderrSection)
             """
-        case .endOfStream(let running, let code):
+        case .endOfStream(let stderr, let running, let code):
             let exit = code.map(String.init) ?? "n/a"
-            return "Server closed stdout (running=\(running), exitCode=\(exit))"
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stderrSection = trimmed.isEmpty ? "(empty)" : "\n---\n\(trimmed)\n---"
+            return """
+            Server closed stdout (running=\(running), exitCode=\(exit))
+            stderr=\(stderrSection)
+            """
         case .executableNotFound(let path):
             return "demo-cli executable not found at \(path); make sure `swift build` produced it"
         case .missingField(let key):
