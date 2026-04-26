@@ -240,7 +240,9 @@ API documentation is generated automatically from source and hosted by Swift Pac
 ## Requirements
 
 - Swift 6.0+
-- macOS 13+
+- macOS 13+ or Linux
+
+Linux is exercised in CI against Swift 6.0 and 6.1 on Ubuntu Jammy.
 
 ## License
 

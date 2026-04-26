@@ -4,6 +4,8 @@ import PackageDescription
 
 let package = Package(
     name: "swift-argument-parser-mcp",
+    // `platforms` only constrains Apple platforms; Linux is supported via the
+    // standard Swift toolchain (CI: Swift 6.0/6.1 on Ubuntu Jammy).
     platforms: [
         .macOS(.v13)
     ],
