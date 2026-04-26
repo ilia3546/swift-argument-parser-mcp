@@ -23,6 +23,10 @@ final class MCPProcessClient: @unchecked Sendable {
         func append(_ chunk: Data) { data.append(chunk) }
         func snapshot() -> String { String(decoding: data, as: UTF8.self) }
         func bytes() -> Int { data.count }
+        func tailHex(count: Int = 16) -> String {
+            let suffix = data.suffix(count)
+            return suffix.map { String(format: "%02x", $0) }.joined(separator: " ")
+        }
     }
 
     // MARK: - Private Properties
@@ -230,6 +234,8 @@ final class MCPProcessClient: @unchecked Sendable {
         Diagnostics(
             stderr: await stderrCapture.snapshot(),
             stdout: await stdoutCapture.snapshot(),
+            stdoutBytes: await stdoutCapture.bytes(),
+            stdoutTailHex: await stdoutCapture.tailHex(),
             isProcessRunning: process.isRunning,
             exitCode: process.isRunning ? nil : process.terminationStatus
         )
@@ -283,21 +289,24 @@ private final class BundleAnchor {}
 struct Diagnostics: Sendable {
     let stderr: String
     let stdout: String
+    let stdoutBytes: Int
+    let stdoutTailHex: String
     let isProcessRunning: Bool
     let exitCode: Int32?
 
     var formatted: String {
         let exit = exitCode.map(String.init) ?? "n/a"
+        let tail = stdoutTailHex.isEmpty ? "(empty)" : stdoutTailHex
         return """
-        running=\(isProcessRunning) exitCode=\(exit)
+        running=\(isProcessRunning) exitCode=\(exit) stdoutBytes=\(stdoutBytes) stdoutTailHex=\(tail)
         stderr=\(format(stderr))
-        stdout=\(format(stdout))
+        stdoutRaw=\(format(stdout, trim: false))
         """
     }
 
-    private func format(_ stream: String) -> String {
-        let trimmed = stream.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "(empty)" : "\n---\n\(trimmed)\n---"
+    private func format(_ stream: String, trim: Bool = true) -> String {
+        let value = trim ? stream.trimmingCharacters(in: .whitespacesAndNewlines) : stream
+        return value.isEmpty ? "(empty)" : "\n---\n\(value)\n---"
     }
 }
 
