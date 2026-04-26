@@ -1,9 +1,13 @@
 import Foundation
 
+// MARK: - MCPProcessClient
+
 /// Test harness that drives a child `demo-cli mcp` process as a JSON-RPC client
 /// over stdio. Used by `MCPServerIntegrationTests` to exercise the full
 /// `initialize` → `tools/list` → `tools/call` cycle against the real binary.
 final class MCPProcessClient: @unchecked Sendable {
+
+    // MARK: - Private Properties
 
     private let process: Process
     private let stdin: FileHandle
@@ -11,6 +15,8 @@ final class MCPProcessClient: @unchecked Sendable {
     private let stderrDrainer: Task<Void, Never>
     private var stdoutBuffer = Data()
     private var nextID: Int = 0
+
+    // MARK: - Initializers
 
     private init(
         process: Process,
@@ -23,6 +29,8 @@ final class MCPProcessClient: @unchecked Sendable {
         self.stdout = stdout
         self.stderrDrainer = stderrDrainer
     }
+
+    // MARK: - Lifecycle
 
     /// Spawns `demo-cli mcp` and wires up stdin/stdout pipes for JSON-RPC.
     static func launch() throws -> MCPProcessClient {
@@ -56,6 +64,17 @@ final class MCPProcessClient: @unchecked Sendable {
             stderrDrainer: drainer
         )
     }
+
+    func terminate() {
+        stderrDrainer.cancel()
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
+        try? stdin.close()
+    }
+
+    // MARK: - JSON-RPC
 
     /// Performs the MCP `initialize` request and `notifications/initialized`
     /// follow-up. Returns the server's `result` object.
@@ -107,15 +126,6 @@ final class MCPProcessClient: @unchecked Sendable {
             message["params"] = params
         }
         try writeMessage(message)
-    }
-
-    func terminate() {
-        stderrDrainer.cancel()
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-        }
-        try? stdin.close()
     }
 
     // MARK: - I/O
@@ -185,7 +195,7 @@ final class MCPProcessClient: @unchecked Sendable {
         }
     }
 
-    // MARK: - Locating the built executable
+    // MARK: - Executable Path
 
     private static func demoCLIURL() throws -> URL {
         let directory = productsDirectory
@@ -208,12 +218,19 @@ final class MCPProcessClient: @unchecked Sendable {
     }
 }
 
+// MARK: - MCPClientError
+
 enum MCPClientError: Error, CustomStringConvertible {
+
+    // MARK: - Cases
+
     case timeout(method: String)
     case endOfStream(isProcessRunning: Bool, exitCode: Int32?)
     case executableNotFound(String)
     case missingField(String)
     case wrongType(field: String, expected: String)
+
+    // MARK: - CustomStringConvertible
 
     var description: String {
         switch self {
@@ -231,9 +248,11 @@ enum MCPClientError: Error, CustomStringConvertible {
     }
 }
 
-// MARK: - JSON convenience accessors
+// MARK: - JSON Convenience Accessors
 
 extension Dictionary where Key == String, Value == Any {
+
+    // MARK: - Required Fields
 
     func requireResult() throws -> [String: Any] {
         try requireObject(at: "result")
@@ -268,6 +287,8 @@ extension Dictionary where Key == String, Value == Any {
         }
         return value
     }
+
+    // MARK: - Content Helpers
 
     /// Returns the text of the first `{"type": "text", "text": "..."}` content
     /// block in a `tools/call` result, with surrounding whitespace trimmed.
