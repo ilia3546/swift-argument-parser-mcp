@@ -26,7 +26,7 @@ public enum MCPServerError: Error, CustomStringConvertible {
     public var description: String {
         switch self {
         case .dumpHelpFailed(let stderr, let exitCode):
-            "Failed to dump help (exit code \(exitCode)): \(stderr)"
+            Self.dumpHelpFailureDescription(stderr: stderr, exitCode: exitCode)
 
         case .invalidDumpHelpOutput:
             "Could not decode --experimental-dump-help output"
@@ -37,5 +37,39 @@ public enum MCPServerError: Error, CustomStringConvertible {
         case .unableToDetectCurrentExecutablePath:
             "Unable to detect current executable path"
         }
+    }
+
+    // The actionable diagnostic from a failing CLI is almost always at the
+    // tail of stderr, so when the captured stream is long the leading bytes
+    // are dropped from `description`. The full stderr is still available on
+    // the case's associated value.
+    static let maxStderrCharactersInDescription = 4_000
+
+    private static func dumpHelpFailureDescription(stderr: String, exitCode: Int32) -> String {
+        let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "Failed to dump help (exit code \(exitCode)) — stderr was empty"
+        }
+
+        let totalCount = trimmed.count
+        let truncated = totalCount > maxStderrCharactersInDescription
+        let body: String
+        let header: String
+        if truncated {
+            let omitted = totalCount - maxStderrCharactersInDescription
+            let tail = String(trimmed.suffix(maxStderrCharactersInDescription))
+            body = "[… \(omitted) earlier characters truncated]\n\(tail)"
+            header = "stderr (\(totalCount) chars total, last \(maxStderrCharactersInDescription) shown):"
+        } else {
+            body = trimmed
+            header = "stderr (\(totalCount) chars):"
+        }
+
+        let indented = body
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "    \($0)" }
+            .joined(separator: "\n")
+
+        return "Failed to dump help (exit code \(exitCode))\n\(header)\n\(indented)"
     }
 }
