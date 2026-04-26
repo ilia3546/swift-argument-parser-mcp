@@ -179,19 +179,16 @@ final class MCPProcessClient: @unchecked Sendable {
             group.addTask { [self] in
                 while true {
                     if let object = consumeJSONObjectFromBuffer() {
-                        // Match a response by JSON-RPC structure rather than
-                        // strict id type. NSNumber-vs-Int casting from
-                        // JSONSerialization has surprising failure modes; we
-                        // run one request at a time per client so the next
-                        // object with a `result` or `error` member is ours.
-                        if matchesRequest(object, id: id) {
+                        let matched = matchesRequest(object, id: id)
+                        debugLog("match-check id=\(id) matched=\(matched) idRaw=\(String(describing: object["id"]))")
+                        if matched {
                             return ResponseBox(value: object)
                         }
-                        // Notification or unrelated message; keep reading.
                         continue
                     }
                     try Task.checkCancellation()
                     let chunk = try await readChunk()
+                    debugLog("readChunk returned bytes=\(chunk.count)")
                     if chunk.isEmpty {
                         throw MCPClientError.endOfStream(
                             isProcessRunning: process.isRunning,
@@ -231,18 +228,41 @@ final class MCPProcessClient: @unchecked Sendable {
         if let nlIndex = stdoutBuffer.firstIndex(of: 0x0A) {
             let line = Data(stdoutBuffer[stdoutBuffer.startIndex..<nlIndex])
             stdoutBuffer.removeSubrange(stdoutBuffer.startIndex...nlIndex)
+            debugLog("nl@\(nlIndex) lineBytes=\(line.count) bufLeft=\(stdoutBuffer.count)")
             if line.isEmpty { return nil }
-            return try? JSONSerialization.jsonObject(with: line) as? [String: Any]
+            do {
+                let parsed = try JSONSerialization.jsonObject(with: line)
+                if let dict = parsed as? [String: Any] {
+                    debugLog("parsed keys=\(dict.keys.sorted())")
+                    return dict
+                }
+                debugLog("not-a-dict type=\(type(of: parsed))")
+                return nil
+            } catch {
+                debugLog("parse-error: \(error)")
+                return nil
+            }
         }
         var candidate = stdoutBuffer
         while let last = candidate.last, isJSONWhitespace(last) {
             candidate.removeLast()
         }
-        guard !candidate.isEmpty,
-              let object = try? JSONSerialization.jsonObject(with: candidate) as? [String: Any]
-        else { return nil }
+        guard !candidate.isEmpty else {
+            debugLog("buffer-empty")
+            return nil
+        }
+        guard let object = try? JSONSerialization.jsonObject(with: candidate) as? [String: Any]
+        else {
+            debugLog("fallback-parse-failed bytes=\(candidate.count)")
+            return nil
+        }
         stdoutBuffer.removeAll(keepingCapacity: true)
+        debugLog("fallback-parsed keys=\(object.keys.sorted())")
         return object
+    }
+
+    private func debugLog(_ message: String) {
+        FileHandle.standardError.write(Data("[mcp-test] \(message)\n".utf8))
     }
 
     private func isJSONWhitespace(_ byte: UInt8) -> Bool {
