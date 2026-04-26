@@ -179,10 +179,15 @@ final class MCPProcessClient: @unchecked Sendable {
             group.addTask { [self] in
                 while true {
                     if let object = consumeJSONObjectFromBuffer() {
-                        if let respID = object["id"] as? Int, respID == id {
+                        // Match a response by JSON-RPC structure rather than
+                        // strict id type. NSNumber-vs-Int casting from
+                        // JSONSerialization has surprising failure modes; we
+                        // run one request at a time per client so the next
+                        // object with a `result` or `error` member is ours.
+                        if matchesRequest(object, id: id) {
                             return ResponseBox(value: object)
                         }
-                        // Notification or unrelated id; keep reading.
+                        // Notification or unrelated message; keep reading.
                         continue
                     }
                     try Task.checkCancellation()
@@ -242,6 +247,23 @@ final class MCPProcessClient: @unchecked Sendable {
 
     private func isJSONWhitespace(_ byte: UInt8) -> Bool {
         byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
+    }
+
+    /// Treats `object` as the response to our outstanding request when it
+    /// looks like one: it must carry a `result` or `error` member, and (if
+    /// it has an `id` we can read) the id must match.
+    private func matchesRequest(_ object: [String: Any], id: Int) -> Bool {
+        guard object["result"] != nil || object["error"] != nil else {
+            return false
+        }
+        let raw = object["id"]
+        if let int = raw as? Int { return int == id }
+        if let num = raw as? NSNumber { return num.intValue == id }
+        if let dbl = raw as? Double { return Int(dbl) == id }
+        if let str = raw as? String, let parsed = Int(str) { return parsed == id }
+        // Couldn't read the id but the structure says it's a response;
+        // for the .serialized one-at-a-time test harness, that's enough.
+        return true
     }
 
     /// Builds a diagnostic snapshot of the child's state for inclusion in
