@@ -117,7 +117,7 @@ final class SchemaBuilder: Sendable {
 
     private func enumValues(for argument: DumpArgumentInfo, type: InferredType) -> [Value]? {
         guard let allValues = argument.allValues, !allValues.isEmpty else { return nil }
-        return allValues.map { schemaValue(from: $0, as: type) }
+        return allValues.map { schemaValue(from: $0, as: type) ?? .string($0) }
     }
 
     private func defaultSchemaValue(for argument: DumpArgumentInfo, type: InferredType) -> Value? {
@@ -125,19 +125,19 @@ final class SchemaBuilder: Sendable {
         return schemaValue(from: raw, as: type)
     }
 
-    private func schemaValue(from raw: String, as type: InferredType) -> Value {
+    private func schemaValue(from raw: String, as type: InferredType) -> Value? {
         switch type {
         case .integer:
-            if let intValue = Int(raw) { return .int(intValue) }
+            return Int(raw).map { .int($0) }
         case .number:
-            if let doubleValue = Double(raw) { return .double(doubleValue) }
+            return Double(raw).map { .double($0) }
         case .boolean:
             if raw == "true" { return .bool(true) }
             if raw == "false" { return .bool(false) }
+            return nil
         case .string:
-            break
+            return .string(raw)
         }
-        return .string(raw)
     }
 
     private func uniformType(of values: [String]) -> InferredType? {
