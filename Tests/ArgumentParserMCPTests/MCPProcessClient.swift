@@ -16,12 +16,21 @@ final class MCPProcessClient: @unchecked Sendable {
         let value: [String: Any]
     }
 
+    /// Thread-safe accumulator for the child's stderr. The drainer task
+    /// writes into it; diagnostic snapshots read from it.
+    private actor StderrCapture {
+        private var data = Data()
+        func append(_ chunk: Data) { data.append(chunk) }
+        func snapshot() -> String { String(decoding: data, as: UTF8.self) }
+    }
+
     // MARK: - Private Properties
 
     private let process: Process
     private let stdin: FileHandle
     private let stdout: FileHandle
     private let stderrDrainer: Task<Void, Never>
+    private let stderrCapture: StderrCapture
     private var stdoutBuffer = Data()
     private var nextID: Int = 0
 
@@ -31,12 +40,14 @@ final class MCPProcessClient: @unchecked Sendable {
         process: Process,
         stdin: FileHandle,
         stdout: FileHandle,
-        stderrDrainer: Task<Void, Never>
+        stderrDrainer: Task<Void, Never>,
+        stderrCapture: StderrCapture
     ) {
         self.process = process
         self.stdin = stdin
         self.stdout = stdout
         self.stderrDrainer = stderrDrainer
+        self.stderrCapture = stderrCapture
     }
 
     // MARK: - Lifecycle
@@ -56,13 +67,16 @@ final class MCPProcessClient: @unchecked Sendable {
 
         try process.run()
 
-        // Drain stderr so the server doesn't block on a full pipe buffer.
+        // Drain stderr (so the server doesn't block on a full pipe buffer)
+        // and capture it for diagnostics on timeout / error.
         let stderrHandle = stderrPipe.fileHandleForReading
+        let capture = StderrCapture()
         let drainer = Task.detached {
             while true {
                 guard let chunk = try? stderrHandle.read(upToCount: 4096),
                       !chunk.isEmpty
                 else { return }
+                await capture.append(chunk)
             }
         }
 
@@ -70,7 +84,8 @@ final class MCPProcessClient: @unchecked Sendable {
             process: process,
             stdin: stdinPipe.fileHandleForWriting,
             stdout: stdoutPipe.fileHandleForReading,
-            stderrDrainer: drainer
+            stderrDrainer: drainer,
+            stderrCapture: capture
         )
     }
 
@@ -171,7 +186,10 @@ final class MCPProcessClient: @unchecked Sendable {
                 // can't unblock a `FileHandle.read(upToCount:)` running on
                 // a dispatch queue, and the task group deadlocks.
                 try? stdout.close()
-                throw MCPClientError.timeout(method: "id=\(id)")
+                throw MCPClientError.timeout(
+                    method: "id=\(id)",
+                    diagnostics: await diagnosticSnapshot()
+                )
             }
             let result = try await group.next()!
             group.cancelAll()
@@ -197,6 +215,17 @@ final class MCPProcessClient: @unchecked Sendable {
             }
             stdoutBuffer.append(chunk)
         }
+    }
+
+    /// Builds a diagnostic snapshot of the child's state for inclusion in
+    /// timeout/EOF errors. Captures stderr (in case the server logged a
+    /// failure), the running flag, and the exit code if known.
+    private func diagnosticSnapshot() async -> Diagnostics {
+        Diagnostics(
+            stderr: await stderrCapture.snapshot(),
+            isProcessRunning: process.isRunning,
+            exitCode: process.isRunning ? nil : process.terminationStatus
+        )
     }
 
     private func readChunk() async throws -> Data {
@@ -240,13 +269,30 @@ final class MCPProcessClient: @unchecked Sendable {
 /// on macOS. Must be a class because `Bundle(for:)` is defined on `AnyClass`.
 private final class BundleAnchor {}
 
+// MARK: - Diagnostics
+
+/// Snapshot of the child process state, attached to errors so timeout
+/// failures in CI carry the server's stderr instead of being opaque.
+struct Diagnostics: Sendable {
+    let stderr: String
+    let isProcessRunning: Bool
+    let exitCode: Int32?
+
+    var formatted: String {
+        let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stderrSection = trimmed.isEmpty ? "(empty)" : "\n---\n\(trimmed)\n---"
+        let exit = exitCode.map(String.init) ?? "n/a"
+        return "running=\(isProcessRunning) exitCode=\(exit) stderr=\(stderrSection)"
+    }
+}
+
 // MARK: - MCPClientError
 
 enum MCPClientError: Error, CustomStringConvertible {
 
     // MARK: - Cases
 
-    case timeout(method: String)
+    case timeout(method: String, diagnostics: Diagnostics)
     case endOfStream(isProcessRunning: Bool, exitCode: Int32?)
     case executableNotFound(String)
     case missingField(String)
@@ -256,8 +302,8 @@ enum MCPClientError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .timeout(let method):
-            return "Timed out waiting for MCP response (\(method))"
+        case .timeout(let method, let diagnostics):
+            return "Timed out waiting for MCP response (\(method)); \(diagnostics.formatted)"
         case .endOfStream(let running, let code):
             return "Server closed stdout (running=\(running), exitCode=\(String(describing: code)))"
         case .executableNotFound(let path):
