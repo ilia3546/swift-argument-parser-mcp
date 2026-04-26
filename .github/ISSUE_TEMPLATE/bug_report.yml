@@ -1,0 +1,78 @@
+name: Bug report
+description: Something in ArgumentParserMCP is broken or behaves unexpectedly.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in the sections
+        below — the more concrete the repro, the faster the fix.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear, concise description of what is wrong.
+      placeholder: "`MCPServer` exits with status 1 when ..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal reproduction. Ideally, a small CLI snippet that uses `MCPServer` plus the exact command you ran.
+      value: |
+        1. Define a CLI:
+           ```swift
+           // ParsableCommand + MCPCommand definitions
+           ```
+        2. Start the server with `… mcp-serve`
+        3. Send the following MCP request: `…`
+        4. Observe: …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include logs, stack traces, or stderr output if available.
+    validations:
+      required: true
+  - type: input
+    id: package-version
+    attributes:
+      label: ArgumentParserMCP version
+      description: Tag, branch, or commit SHA you are using.
+      placeholder: "0.1.0 / main@abc1234"
+    validations:
+      required: true
+  - type: input
+    id: swift-version
+    attributes:
+      label: Swift toolchain
+      description: Output of `swift --version`.
+      placeholder: "Swift 6.1 (Apple Swift) on aarch64-apple-macosx14.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - macOS
+        - Linux
+        - Other (specify in additional context)
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: MCP client used, host application, anything else that might help.
