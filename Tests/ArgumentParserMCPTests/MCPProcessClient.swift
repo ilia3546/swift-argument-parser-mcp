@@ -16,12 +16,13 @@ final class MCPProcessClient: @unchecked Sendable {
         let value: [String: Any]
     }
 
-    /// Thread-safe accumulator for the child's stderr. The drainer task
-    /// writes into it; diagnostic snapshots read from it.
-    private actor StderrCapture {
+    /// Thread-safe accumulator for one of the child's output streams.
+    /// Writers append, diagnostic snapshots read.
+    private actor StreamCapture {
         private var data = Data()
         func append(_ chunk: Data) { data.append(chunk) }
         func snapshot() -> String { String(decoding: data, as: UTF8.self) }
+        func bytes() -> Int { data.count }
     }
 
     // MARK: - Private Properties
@@ -30,7 +31,8 @@ final class MCPProcessClient: @unchecked Sendable {
     private let stdin: FileHandle
     private let stdout: FileHandle
     private let stderrDrainer: Task<Void, Never>
-    private let stderrCapture: StderrCapture
+    private let stderrCapture: StreamCapture
+    private let stdoutCapture: StreamCapture
     private var stdoutBuffer = Data()
     private var nextID: Int = 0
 
@@ -41,13 +43,15 @@ final class MCPProcessClient: @unchecked Sendable {
         stdin: FileHandle,
         stdout: FileHandle,
         stderrDrainer: Task<Void, Never>,
-        stderrCapture: StderrCapture
+        stderrCapture: StreamCapture,
+        stdoutCapture: StreamCapture
     ) {
         self.process = process
         self.stdin = stdin
         self.stdout = stdout
         self.stderrDrainer = stderrDrainer
         self.stderrCapture = stderrCapture
+        self.stdoutCapture = stdoutCapture
     }
 
     // MARK: - Lifecycle
@@ -70,7 +74,7 @@ final class MCPProcessClient: @unchecked Sendable {
         // Drain stderr (so the server doesn't block on a full pipe buffer)
         // and capture it for diagnostics on timeout / error.
         let stderrHandle = stderrPipe.fileHandleForReading
-        let capture = StderrCapture()
+        let capture = StreamCapture()
         let drainer = Task.detached {
             while true {
                 guard let chunk = try? stderrHandle.read(upToCount: 4096),
@@ -85,7 +89,8 @@ final class MCPProcessClient: @unchecked Sendable {
             stdin: stdinPipe.fileHandleForWriting,
             stdout: stdoutPipe.fileHandleForReading,
             stderrDrainer: drainer,
-            stderrCapture: capture
+            stderrCapture: capture,
+            stdoutCapture: StreamCapture()
         )
     }
 
@@ -213,6 +218,7 @@ final class MCPProcessClient: @unchecked Sendable {
                     exitCode: process.isRunning ? nil : process.terminationStatus
                 )
             }
+            await stdoutCapture.append(chunk)
             stdoutBuffer.append(chunk)
         }
     }
@@ -223,6 +229,7 @@ final class MCPProcessClient: @unchecked Sendable {
     private func diagnosticSnapshot() async -> Diagnostics {
         Diagnostics(
             stderr: await stderrCapture.snapshot(),
+            stdout: await stdoutCapture.snapshot(),
             isProcessRunning: process.isRunning,
             exitCode: process.isRunning ? nil : process.terminationStatus
         )
@@ -275,14 +282,22 @@ private final class BundleAnchor {}
 /// failures in CI carry the server's stderr instead of being opaque.
 struct Diagnostics: Sendable {
     let stderr: String
+    let stdout: String
     let isProcessRunning: Bool
     let exitCode: Int32?
 
     var formatted: String {
-        let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stderrSection = trimmed.isEmpty ? "(empty)" : "\n---\n\(trimmed)\n---"
         let exit = exitCode.map(String.init) ?? "n/a"
-        return "running=\(isProcessRunning) exitCode=\(exit) stderr=\(stderrSection)"
+        return """
+        running=\(isProcessRunning) exitCode=\(exit)
+        stderr=\(format(stderr))
+        stdout=\(format(stdout))
+        """
+    }
+
+    private func format(_ stream: String) -> String {
+        let trimmed = stream.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "(empty)" : "\n---\n\(trimmed)\n---"
     }
 }
 
