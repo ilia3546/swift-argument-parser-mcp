@@ -183,7 +183,10 @@ the README.
 
 ## Commit & PR conventions
 
-- **Branch name**: `claude/<slug>-<short-id>` (matches the existing history).
+- **Branch name**: `<type>/<short-slug>`, where `<type>` is one of
+  `feature`, `fix`, `chore`, `docs`, `refactor`, or `test`
+  (e.g. `feature/streaming-results`, `fix/argument-converter-overflow`,
+  `docs/troubleshooting-stdio`). Keep the slug short and kebab-case.
 - **Subject**: imperative, no scope prefix, ≤72 characters
   ("Validate MCP arguments before spawning subprocess").
 - **Body**: one paragraph explaining the motivation; bullet list for

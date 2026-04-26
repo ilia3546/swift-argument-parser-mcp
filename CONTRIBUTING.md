@@ -33,8 +33,13 @@ not the issue tracker.
 
 ## Pull requests
 
-1. **Branch naming.** Use `claude/<slug>-<short-id>` to match the existing
-   history (e.g. `claude/add-streaming-results-9aB2c`).
+1. **Branch naming.** Use `<type>/<short-slug>`, where `<type>` is one of
+   `feature`, `fix`, `chore`, `docs`, `refactor`, or `test`. Keep the slug
+   short and kebab-case. Examples:
+   - `feature/streaming-results`
+   - `fix/argument-converter-overflow`
+   - `docs/troubleshooting-stdio`
+   - `refactor/schema-builder-split`
 2. **Commits.** Imperative subject, ≤72 characters, no scope prefix
    ("Validate MCP arguments before spawning subprocess"). One logical change
    per commit. Never amend a commit that did not actually land — make a new
