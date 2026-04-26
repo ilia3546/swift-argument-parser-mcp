@@ -18,6 +18,12 @@ The introspection invocation
 (`./my-cli --experimental-dump-help`) returned a non-zero exit code. The
 attached `stderr` and `exitCode` are the ones the child process produced.
 
+The error's `description` renders `stderr` as an indented block underneath
+the exit-code line, and trims very long output to its trailing characters
+(the actionable diagnostic is almost always at the tail). If you need the
+unabridged stream — for logging or post-mortems — read the `stderr`
+associated value directly instead of formatting `description`.
+
 **Fix.** Run the same command yourself:
 
 ```
