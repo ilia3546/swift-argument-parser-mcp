@@ -303,12 +303,14 @@ final class MCPProcessClient: @unchecked Sendable {
     private func readChunk() async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global().async { [stdout] in
-                do {
-                    let chunk = try stdout.read(upToCount: 4096) ?? Data()
-                    continuation.resume(returning: chunk)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+                // FileHandle.availableData blocks only until the first byte
+                // arrives and then returns whatever is currently buffered.
+                // FileHandle.read(upToCount:) on macOS waits for the full
+                // requested count or EOF on a pipe — for a 267-byte response
+                // with a 4096-byte ask, that means we'd block until the
+                // server (or timeout) closed the stream.
+                let data = stdout.availableData
+                continuation.resume(returning: data)
             }
         }
     }
