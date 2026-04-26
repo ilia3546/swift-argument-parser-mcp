@@ -5,6 +5,18 @@ Before opening this PR, please skim CONTRIBUTING.md — it is the single
 source of truth for code style, documentation policy, and contribution
 workflow. The checklist below mirrors the "Adding a new feature" checklist
 from that file.
+
+Title format (drives the release changelog — see CONTRIBUTING.md →
+"PR titles and labels"):
+
+    <type>: <imperative subject>
+
+`<type>` is one of: feature, fix, perf, refactor, docs, test, chore, ci, build.
+Append `!` to signal a breaking change (e.g. `feature!: drop legacy name`).
+
+Also apply the matching label (`feature`, `fix`, `perf`, `refactor`, `docs`,
+`test`, `chore`, `ci`, `build`; plus `breaking` for breaking changes, or
+`skip-changelog` for noise that shouldn't show up in release notes).
 -->
 
 ## Summary

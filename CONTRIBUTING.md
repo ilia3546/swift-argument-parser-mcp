@@ -203,19 +203,63 @@ the README.
 
 ## Commit & PR conventions
 
-- **Branch name**: `<type>/<short-slug>`, where `<type>` is one of
-  `feature`, `fix`, `chore`, `docs`, `refactor`, or `test`
-  (e.g. `feature/streaming-results`, `fix/argument-converter-overflow`,
-  `docs/troubleshooting-stdio`). Keep the slug short and kebab-case.
+### Branch names
+
+`<type>/<short-slug>`, where `<type>` is one of:
+
+| Type       | Use it for                                                    |
+| ---------- | ------------------------------------------------------------- |
+| `feature`  | New user-visible capability.                                  |
+| `fix`      | Bug fix.                                                      |
+| `perf`     | Performance improvement with no behaviour change.             |
+| `refactor` | Internal restructure, no behaviour change.                    |
+| `docs`     | README / DocC / `CONTRIBUTING.md` only.                       |
+| `test`     | Adding or reworking tests, no production code change.         |
+| `chore`    | Repo housekeeping that doesn't fit anything else.             |
+| `ci`       | `.github/workflows/`, Dependabot config, release plumbing.    |
+| `build`    | `Package.swift`, SPM resolution, build-system changes.        |
+
+Examples: `feature/streaming-results`, `fix/argument-converter-overflow`,
+`docs/troubleshooting-stdio`. Keep the slug short and kebab-case.
+
+### Commit messages
+
 - **Subject**: imperative, no scope prefix, ≤72 characters
-  ("Validate MCP arguments before spawning subprocess").
+  ("Validate MCP arguments before spawning subprocess"). Don't put a
+  Conventional-Commits `feat:` / `fix:` prefix in the commit subject —
+  that prefix lives on the PR title (see below), not on the commits.
 - **Body**: one paragraph explaining the motivation; bullet list for
   multi-step behavioural changes.
 - One logical change per commit.
 - If a pre-commit hook fails, **make a new commit** with the fix — never
   amend a commit that didn't actually land.
-- The PR description follows the repository's PR template; the checklist
-  mirrors "Adding a new feature" below.
+
+### PR titles and labels (drives the release changelog)
+
+GitHub's auto-generated release notes are configured in
+[`.github/release.yml`](.github/release.yml) and group merged PRs into
+sections **by label**. To keep that changelog readable:
+
+1. **Title** — `<type>: <imperative subject>`, where `<type>` is one of
+   the branch types above. Subject stays ≤72 characters and doesn't
+   repeat the type word. Append `!` after the type to signal a breaking
+   change (e.g. `feature!: drop MCPCommand.legacyName`).
+
+   Examples:
+   - `feature: stream tool/call results incrementally`
+   - `fix: clamp negative integers in argument converter`
+   - `docs: document stdio framing in Troubleshooting`
+   - `ci: bump actions/checkout to v6`
+
+2. **Label** — apply exactly one of `feature`, `fix`, `perf`, `refactor`,
+   `docs`, `test`, `chore`, `ci`, `build`, matching the title's type.
+   Add `breaking` in addition for breaking changes. PRs with the
+   `skip-changelog` label are omitted from the release notes (use it for
+   trivially-internal noise that doesn't deserve a line in the
+   changelog). Dependabot's PRs are excluded automatically.
+
+3. **Description** — follows the repository's PR template; the checklist
+   mirrors "Adding a new feature" below.
 
 ## Checklist: adding a new feature
 
