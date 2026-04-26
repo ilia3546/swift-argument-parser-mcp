@@ -246,6 +246,8 @@ func makeCallToolResult(from result: ProcessRunner.Result) -> CallTool.Result {
         "terminationReason": .string(result.terminationReason.rawValue),
         "stdoutTruncated": .bool(result.stdoutTruncated),
         "stderrTruncated": .bool(result.stderrTruncated),
+        "stdoutReadFailed": .bool(result.stdoutReadFailed),
+        "stderrReadFailed": .bool(result.stderrReadFailed),
         "durationMs": .int(result.durationMs),
     ])
 

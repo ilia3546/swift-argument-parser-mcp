@@ -15,6 +15,8 @@ final class ProcessRunner: Sendable {
         let terminationReason: TerminationReason
         let stdoutTruncated: Bool
         let stderrTruncated: Bool
+        let stdoutReadFailed: Bool
+        let stderrReadFailed: Bool
         let durationMs: Int
     }
 
@@ -44,20 +46,36 @@ final class ProcessRunner: Sendable {
 
         let merger = StreamMerger(perStreamCapBytes: perStreamCapBytes)
 
-        await withTaskGroup(of: Void.self) { group in
+        let readFailures = await withTaskGroup(
+            of: (StreamMerger.Stream, Bool).self,
+            returning: (stdout: Bool, stderr: Bool).self
+        ) { group in
             group.addTask {
-                let handle = stdoutPipe.fileHandleForReading
-                while let chunk = try? handle.read(upToCount: 4096), !chunk.isEmpty {
-                    await merger.append(stream: .stdout, chunk: chunk)
-                }
+                let failed = await ProcessRunner.drain(
+                    handle: stdoutPipe.fileHandleForReading,
+                    stream: .stdout,
+                    into: merger
+                )
+                return (.stdout, failed)
             }
             group.addTask {
-                let handle = stderrPipe.fileHandleForReading
-                while let chunk = try? handle.read(upToCount: 4096), !chunk.isEmpty {
-                    await merger.append(stream: .stderr, chunk: chunk)
+                let failed = await ProcessRunner.drain(
+                    handle: stderrPipe.fileHandleForReading,
+                    stream: .stderr,
+                    into: merger
+                )
+                return (.stderr, failed)
+            }
+
+            var stdoutFailed = false
+            var stderrFailed = false
+            for await (stream, failed) in group {
+                switch stream {
+                case .stdout: stdoutFailed = failed
+                case .stderr: stderrFailed = failed
                 }
             }
-            await group.waitForAll()
+            return (stdoutFailed, stderrFailed)
         }
 
         process.waitUntilExit()
@@ -84,7 +102,45 @@ final class ProcessRunner: Sendable {
             terminationReason: reason,
             stdoutTruncated: snapshot.stdoutTruncated,
             stderrTruncated: snapshot.stderrTruncated,
+            stdoutReadFailed: readFailures.stdout,
+            stderrReadFailed: readFailures.stderr,
             durationMs: durationMs
         )
+    }
+
+    // MARK: - Private Helpers
+
+    /// Reads from `handle` until EOF, forwarding chunks to `merger`. Returns
+    /// `true` if a non-EOF I/O error interrupted the drain. The error is
+    /// logged to `stderr` so it isn't lost when the caller doesn't inspect
+    /// the returned flag.
+    private static func drain(
+        handle: FileHandle,
+        stream: StreamMerger.Stream,
+        into merger: StreamMerger
+    ) async -> Bool {
+        while true {
+            let chunk: Data?
+            do {
+                chunk = try handle.read(upToCount: 4096)
+            } catch {
+                logReadFailure(stream: stream, error: error)
+                return true
+            }
+            guard let chunk, !chunk.isEmpty else { return false }
+            await merger.append(stream: stream, chunk: chunk)
+        }
+    }
+
+    private static func logReadFailure(stream: StreamMerger.Stream, error: Error) {
+        let label: String
+        switch stream {
+        case .stdout: label = "stdout"
+        case .stderr: label = "stderr"
+        }
+        let message = "ArgumentParserMCP: failed to read child \(label): \(error)\n"
+        if let data = message.data(using: .utf8) {
+            try? FileHandle.standardError.write(contentsOf: data)
+        }
     }
 }
