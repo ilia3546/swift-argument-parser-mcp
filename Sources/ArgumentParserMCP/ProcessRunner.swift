@@ -2,6 +2,8 @@ import Foundation
 
 final class ProcessRunner: Sendable {
 
+    // MARK: - Nested Types
+
     enum TerminationReason: String, Sendable {
         case exit
         case uncaughtSignal
@@ -20,12 +22,25 @@ final class ProcessRunner: Sendable {
         let durationMs: Int
     }
 
+    // MARK: - Internal API
+
     /// Executes the binary at `executablePath` with `arguments`, capturing
     /// both standard output and standard error.
+    ///
+    /// If the calling Swift `Task` is cancelled while the child is still
+    /// running, the child receives `SIGTERM` (via `Process.terminate()`) so
+    /// the agent's `notifications/cancelled` for an in-flight `tools/call`
+    /// actually kills the subprocess instead of letting it run to
+    /// completion. The function then rethrows `CancellationError` so the
+    /// MCP SDK suppresses the tool-call response per the MCP cancellation
+    /// spec.
     ///
     /// - Parameter perStreamCapBytes: Maximum number of bytes captured per
     ///   stream. Output beyond the cap is dropped and the corresponding
     ///   `truncated` flag is set on the result. Defaults to no cap.
+    /// - Throws: `CancellationError` if the surrounding `Task` was cancelled
+    ///   before the child finished. Re-throws any error from `Process.run()`
+    ///   if the binary could not be spawned.
     func run(
         executablePath: String,
         arguments: [String],
@@ -44,6 +59,46 @@ final class ProcessRunner: Sendable {
         let startedAt = Date()
         try process.run()
 
+        // `withTaskCancellationHandler`'s `onCancel:` closure must be
+        // `@Sendable`, but `Process` is not `Sendable`. The only member we
+        // touch from the cancellation closure is `terminate()`, which
+        // ultimately calls `kill(pid, SIGTERM)` and is safe from any
+        // thread, so we shuttle the reference across in an unchecked
+        // wrapper.
+        let processHandle = ProcessHandle(process: process)
+
+        let result = await withTaskCancellationHandler {
+            await ProcessRunner.collectResult(
+                process: process,
+                stdoutPipe: stdoutPipe,
+                stderrPipe: stderrPipe,
+                perStreamCapBytes: perStreamCapBytes,
+                startedAt: startedAt
+            )
+        } onCancel: {
+            if processHandle.process.isRunning {
+                processHandle.process.terminate()
+            }
+        }
+
+        try Task.checkCancellation()
+        return result
+    }
+
+    // MARK: - Private Helpers
+
+    /// Drains both pipes, waits for the child to exit, and assembles the
+    /// `Result`. Pulled out of `run(...)` so the body of
+    /// `withTaskCancellationHandler` is a single `await` — keeps the
+    /// non-`Sendable` `Pipe` references off the cancellation-handler
+    /// boundary.
+    private static func collectResult(
+        process: Process,
+        stdoutPipe: Pipe,
+        stderrPipe: Pipe,
+        perStreamCapBytes: Int,
+        startedAt: Date
+    ) async -> Result {
         let merger = StreamMerger(perStreamCapBytes: perStreamCapBytes)
 
         let readFailures = await withTaskGroup(
@@ -108,8 +163,6 @@ final class ProcessRunner: Sendable {
         )
     }
 
-    // MARK: - Private Helpers
-
     /// Reads from `handle` until EOF, forwarding chunks to `merger`. Returns
     /// `true` if a non-EOF I/O error interrupted the drain. The error is
     /// logged to `stderr` so it isn't lost when the caller doesn't inspect
@@ -143,4 +196,14 @@ final class ProcessRunner: Sendable {
             try? FileHandle.standardError.write(contentsOf: data)
         }
     }
+}
+
+// MARK: - ProcessHandle
+
+/// `@Sendable`-bridge for a `Foundation.Process` so a reference can be
+/// captured by a `withTaskCancellationHandler` `onCancel:` closure.
+/// `Process.terminate()` and `Process.isRunning` are safe to invoke from any
+/// thread, so the unchecked conformance is sound for the narrow use here.
+private struct ProcessHandle: @unchecked Sendable {
+    let process: Process
 }

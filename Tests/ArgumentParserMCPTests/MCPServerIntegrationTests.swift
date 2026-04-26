@@ -213,6 +213,50 @@ struct MCPServerIntegrationTests {
         #expect((structured["stderr"] as? String)?.contains("boom") == true)
     }
 
+    // MARK: - tools/call: cancellation
+
+    /// `notifications/cancelled` for an in-flight `tools/call` must terminate
+    /// the spawned subprocess and leave the server responsive for follow-up
+    /// requests. The cancelled request itself never produces a response per
+    /// the MCP spec, so the only externally observable signal is that the
+    /// subsequent call returns promptly instead of being queued behind a
+    /// 10-second sleep.
+    @Test func cancellationKeepsServerResponsive() async throws {
+        let client = try MCPProcessClient.launch()
+        defer { client.terminate() }
+        _ = try await client.initializeHandshake()
+
+        let sleepID = try client.enqueueRequest(
+            method: "tools/call",
+            params: [
+                "name": "sleep",
+                "arguments": ["milliseconds": 10_000],
+            ] as [String: Any]
+        )
+
+        try await Task.sleep(nanoseconds: 250_000_000)
+        try client.notify(method: "notifications/cancelled", params: [
+            "requestId": sleepID,
+            "reason": "test cancellation",
+        ])
+
+        let started = Date()
+        let response = try await client.send(
+            method: "tools/call",
+            params: [
+                "name": "echo",
+                "arguments": ["words": ["alive"]],
+            ],
+            timeout: 5
+        )
+        let elapsed = Date().timeIntervalSince(started)
+
+        let result = try response.requireResult()
+        #expect(result["isError"] as? Bool == false)
+        #expect(try result.firstTextContent() == "alive")
+        #expect(elapsed < 5.0)
+    }
+
     @Test func unknownToolNameReturnsJSONRPCError() async throws {
         let client = try MCPProcessClient.launch()
         defer { client.terminate() }
