@@ -7,6 +7,15 @@ import Foundation
 /// `initialize` → `tools/list` → `tools/call` cycle against the real binary.
 final class MCPProcessClient: @unchecked Sendable {
 
+    // MARK: - Nested Types
+
+    /// Carries a parsed JSON-RPC response across a task-group boundary.
+    /// `[String: Any]` is not `Sendable` under Swift 6 strict concurrency,
+    /// so we wrap it explicitly. The dictionary is read-only after parsing.
+    private struct ResponseBox: @unchecked Sendable {
+        let value: [String: Any]
+    }
+
     // MARK: - Private Properties
 
     private let process: Process
@@ -140,7 +149,9 @@ final class MCPProcessClient: @unchecked Sendable {
         matchingID id: Int,
         timeout: TimeInterval
     ) async throws -> [String: Any] {
-        try await withThrowingTaskGroup(of: [String: Any].self) { group in
+        // `[String: Any]` isn't `Sendable`, so the value is shuttled out of the
+        // task group inside an unchecked-Sendable wrapper.
+        let box = try await withThrowingTaskGroup(of: ResponseBox.self) { group in
             group.addTask { [self] in
                 while true {
                     let line = try await readLine()
@@ -148,7 +159,7 @@ final class MCPProcessClient: @unchecked Sendable {
                     guard let object = try JSONSerialization.jsonObject(with: line) as? [String: Any]
                     else { continue }
                     if let respID = object["id"] as? Int, respID == id {
-                        return object
+                        return ResponseBox(value: object)
                     }
                     // Notifications or unrelated IDs are ignored.
                 }
@@ -161,6 +172,7 @@ final class MCPProcessClient: @unchecked Sendable {
             group.cancelAll()
             return result
         }
+        return box.value
     }
 
     private func readLine() async throws -> Data {
