@@ -12,10 +12,6 @@ let package = Package(
             name: "ArgumentParserMCP",
             targets: ["ArgumentParserMCP"]
         ),
-        .executable(
-            name: "demo-cli",
-            targets: ["demo-cli"]
-        )
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),

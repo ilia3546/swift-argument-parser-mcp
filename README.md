@@ -193,6 +193,24 @@ let server = MCPServer(
 )
 ```
 
+### Server Instructions
+
+Pass an `instructions` string to give the agent server-level context about your
+CLI — what it's for, when to reach for which tool, or conventions to follow.
+MCP clients surface this during the `initialize` handshake:
+
+```swift
+let server = MCPServer(
+    name: "my-cli",
+    version: "1.0.0",
+    commands: [Deploy.self, Status.self],
+    instructions: """
+        Production deploy CLI. Run `status` before `deploy`. \
+        Tool calls are non-interactive; never wait for prompts.
+        """
+)
+```
+
 ## Adding `ArgumentParserMCP` as a Dependency
 
 To use the `ArgumentParserMCP` library in a SwiftPM project,
