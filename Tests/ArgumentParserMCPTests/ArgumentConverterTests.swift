@@ -12,7 +12,7 @@ struct ArgumentConverterTests {
 
     // MARK: - Flags
 
-    @Test func convertsFlagTrue() {
+    @Test func convertsFlagTrue() throws {
         let args: [String: Value] = ["verbose": .bool(true)]
         let infos = [
             DumpArgumentInfo(
@@ -24,11 +24,11 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["--verbose"])
     }
 
-    @Test func convertsFlagFalse() {
+    @Test func convertsFlagFalse() throws {
         let args: [String: Value] = ["verbose": .bool(false)]
         let infos = [
             DumpArgumentInfo(
@@ -40,11 +40,11 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result.isEmpty)
     }
 
-    @Test func skipsMissingFlag() {
+    @Test func skipsMissingFlag() throws {
         let args: [String: Value] = [:]
         let infos = [
             DumpArgumentInfo(
@@ -56,13 +56,13 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result.isEmpty)
     }
 
     // MARK: - Options
 
-    @Test func convertsStringOption() {
+    @Test func convertsStringOption() throws {
         let args: [String: Value] = ["output": .string("/tmp/out.txt")]
         let infos = [
             DumpArgumentInfo(
@@ -74,11 +74,11 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["--output", "/tmp/out.txt"])
     }
 
-    @Test func convertsIntOption() {
+    @Test func convertsIntOption() throws {
         let args: [String: Value] = ["count": .int(5)]
         let infos = [
             DumpArgumentInfo(
@@ -90,11 +90,11 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["--count", "5"])
     }
 
-    @Test func convertsOptionWithShortName() {
+    @Test func convertsOptionWithShortName() throws {
         let args: [String: Value] = ["n": .string("3")]
         let infos = [
             DumpArgumentInfo(
@@ -106,11 +106,11 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["-n", "3"])
     }
 
-    @Test func convertsRepeatingOption() {
+    @Test func convertsRepeatingOption() throws {
         let args: [String: Value] = [
             "tag": .array([.string("alpha"), .string("beta")])
         ]
@@ -124,13 +124,13 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["--tag", "alpha", "--tag", "beta"])
     }
 
     // MARK: - Positional arguments
 
-    @Test func convertsPositionalArgument() {
+    @Test func convertsPositionalArgument() throws {
         let args: [String: Value] = ["file": .string("input.txt")]
         let infos = [
             DumpArgumentInfo(
@@ -142,11 +142,11 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["input.txt"])
     }
 
-    @Test func convertsRepeatingPositional() {
+    @Test func convertsRepeatingPositional() throws {
         let args: [String: Value] = [
             "files": .array([.string("a.txt"), .string("b.txt")])
         ]
@@ -160,13 +160,13 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["a.txt", "b.txt"])
     }
 
     // MARK: - Mixed arguments
 
-    @Test func positionalsAppearAfterOptionsAndFlags() {
+    @Test func positionalsAppearAfterOptionsAndFlags() throws {
         let args: [String: Value] = [
             "phrase": .string("hello"),
             "count": .string("3"),
@@ -196,13 +196,13 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
 
         // Flags and options first, then positionals
         #expect(result == ["--include-counter", "--count", "3", "hello"])
     }
 
-    @Test func multiplePositionalsPreserveOrder() {
+    @Test func multiplePositionalsPreserveOrder() throws {
         let args: [String: Value] = [
             "source": .string("src.txt"),
             "destination": .string("dst.txt"),
@@ -224,13 +224,13 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["src.txt", "dst.txt"])
     }
 
     // MARK: - Filtering
 
-    @Test func filtersHiddenArguments() {
+    @Test func filtersHiddenArguments() throws {
         let args: [String: Value] = [
             "name": .string("world"),
             "secret": .string("hidden"),
@@ -252,11 +252,11 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["world"])
     }
 
-    @Test func filtersHelpArguments() {
+    @Test func filtersHelpArguments() throws {
         let args: [String: Value] = [
             "name": .string("test"),
             "help": .bool(true),
@@ -278,20 +278,20 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["test"])
     }
 
     // MARK: - Empty input
 
-    @Test func emptyArgumentsProducesEmptyResult() {
-        let result = argumentConverter.convert(arguments: [:], using: [])
+    @Test func emptyArgumentsProducesEmptyResult() throws {
+        let result = try argumentConverter.convert(arguments: [:], using: [])
         #expect(result.isEmpty)
     }
 
     // MARK: - Name resolution
 
-    @Test func usesLongWithSingleDashFormat() {
+    @Test func usesLongWithSingleDashFormat() throws {
         let args: [String: Value] = ["verbose": .bool(true)]
         let infos = [
             DumpArgumentInfo(
@@ -303,7 +303,242 @@ struct ArgumentConverterTests {
             ),
         ]
 
-        let result = argumentConverter.convert(arguments: args, using: infos)
+        let result = try argumentConverter.convert(arguments: args, using: infos)
         #expect(result == ["-verbose"])
+    }
+
+    // MARK: - Validation: required arguments
+
+    @Test func throwsWhenRequiredOptionMissing() {
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: false,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "output")
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: [:], using: infos)
+        }
+    }
+
+    @Test func throwsWhenRequiredPositionalMissing() {
+        let infos = [
+            DumpArgumentInfo(
+                kind: .positional,
+                shouldDisplay: true,
+                isOptional: false,
+                isRepeating: false,
+                valueName: "file"
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: [:], using: infos)
+        }
+    }
+
+    @Test func aggregatesMultipleMissingRequiredArguments() {
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: false,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "output")
+            ),
+            DumpArgumentInfo(
+                kind: .positional,
+                shouldDisplay: true,
+                isOptional: false,
+                isRepeating: false,
+                valueName: "file"
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: [:], using: infos)
+        }
+    }
+
+    @Test func skipsMissingOptionalOption() throws {
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "output")
+            ),
+        ]
+
+        let result = try argumentConverter.convert(arguments: [:], using: infos)
+        #expect(result.isEmpty)
+    }
+
+    // MARK: - Validation: enum (allValues) constraints
+
+    @Test func throwsWhenOptionValueNotInAllowedValues() {
+        let args: [String: Value] = ["language": .string("fr")]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "language"),
+                allValues: ["en", "ru"]
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: args, using: infos)
+        }
+    }
+
+    @Test func acceptsValueInAllowedValues() throws {
+        let args: [String: Value] = ["language": .string("en")]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "language"),
+                allValues: ["en", "ru"]
+            ),
+        ]
+
+        let result = try argumentConverter.convert(arguments: args, using: infos)
+        #expect(result == ["--language", "en"])
+    }
+
+    @Test func throwsWhenRepeatingOptionElementNotAllowed() {
+        let args: [String: Value] = [
+            "language": .array([.string("en"), .string("fr")])
+        ]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: true,
+                preferredName: DumpNameInfo(kind: .long, name: "language"),
+                allValues: ["en", "ru"]
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: args, using: infos)
+        }
+    }
+
+    @Test func enumComparisonWorksForIntegerValues() throws {
+        let args: [String: Value] = ["level": .int(2)]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "level"),
+                allValues: ["1", "2", "3"]
+            ),
+        ]
+
+        let result = try argumentConverter.convert(arguments: args, using: infos)
+        #expect(result == ["--level", "2"])
+    }
+
+    // MARK: - Validation: type / kind mismatches
+
+    @Test func throwsWhenFlagReceivesNonBool() {
+        let args: [String: Value] = ["verbose": .string("true")]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .flag,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "verbose")
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: args, using: infos)
+        }
+    }
+
+    @Test func throwsWhenScalarOptionReceivesArray() {
+        let args: [String: Value] = ["output": .array([.string("a")])]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "output")
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: args, using: infos)
+        }
+    }
+
+    @Test func throwsWhenRepeatingOptionReceivesScalar() {
+        let args: [String: Value] = ["tag": .string("alpha")]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: true,
+                preferredName: DumpNameInfo(kind: .long, name: "tag")
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: args, using: infos)
+        }
+    }
+
+    @Test func throwsWhenScalarOptionReceivesObject() {
+        let args: [String: Value] = ["output": .object(["nested": .string("x")])]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: false,
+                preferredName: DumpNameInfo(kind: .long, name: "output")
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: args, using: infos)
+        }
+    }
+
+    @Test func throwsWhenRepeatingOptionElementIsNotScalar() {
+        let args: [String: Value] = [
+            "tag": .array([.string("alpha"), .object(["k": .string("v")])])
+        ]
+        let infos = [
+            DumpArgumentInfo(
+                kind: .option,
+                shouldDisplay: true,
+                isOptional: true,
+                isRepeating: true,
+                preferredName: DumpNameInfo(kind: .long, name: "tag")
+            ),
+        ]
+
+        #expect(throws: MCPError.self) {
+            try argumentConverter.convert(arguments: args, using: infos)
+        }
     }
 }

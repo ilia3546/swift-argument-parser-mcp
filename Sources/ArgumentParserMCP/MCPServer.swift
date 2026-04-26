@@ -149,7 +149,7 @@ public struct MCPServer: Sendable {
             }
 
             let subcommandPath = buildSubcommandPath(for: reg.commandInfo)
-            let cliArgs = argumentConverter.convert(
+            let cliArgs = try argumentConverter.convert(
                 arguments: params.arguments ?? [:],
                 using: reg.commandInfo.arguments ?? []
             )
