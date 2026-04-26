@@ -178,14 +178,23 @@ final class MCPProcessClient: @unchecked Sendable {
         let box = try await withThrowingTaskGroup(of: ResponseBox.self) { group in
             group.addTask { [self] in
                 while true {
-                    let line = try await readLine()
-                    if line.isEmpty { continue }
-                    guard let object = try JSONSerialization.jsonObject(with: line) as? [String: Any]
-                    else { continue }
-                    if let respID = object["id"] as? Int, respID == id {
-                        return ResponseBox(value: object)
+                    if let object = consumeJSONObjectFromBuffer() {
+                        if let respID = object["id"] as? Int, respID == id {
+                            return ResponseBox(value: object)
+                        }
+                        // Notification or unrelated id; keep reading.
+                        continue
                     }
-                    // Notifications or unrelated IDs are ignored.
+                    try Task.checkCancellation()
+                    let chunk = try await readChunk()
+                    if chunk.isEmpty {
+                        throw MCPClientError.endOfStream(
+                            isProcessRunning: process.isRunning,
+                            exitCode: process.isRunning ? nil : process.terminationStatus
+                        )
+                    }
+                    await stdoutCapture.append(chunk)
+                    stdoutBuffer.append(chunk)
                 }
             }
             group.addTask { [self] in
@@ -207,24 +216,32 @@ final class MCPProcessClient: @unchecked Sendable {
         return box.value
     }
 
-    private func readLine() async throws -> Data {
-        while true {
-            if let nlIndex = stdoutBuffer.firstIndex(of: 0x0A) {
-                let line = Data(stdoutBuffer[stdoutBuffer.startIndex..<nlIndex])
-                stdoutBuffer.removeSubrange(stdoutBuffer.startIndex...nlIndex)
-                return line
-            }
-            try Task.checkCancellation()
-            let chunk = try await readChunk()
-            if chunk.isEmpty {
-                throw MCPClientError.endOfStream(
-                    isProcessRunning: process.isRunning,
-                    exitCode: process.isRunning ? nil : process.terminationStatus
-                )
-            }
-            await stdoutCapture.append(chunk)
-            stdoutBuffer.append(chunk)
+    /// Tries to consume one complete JSON object from the front of the buffer.
+    /// Strips a leading `\n`-terminated line first (the canonical NDJSON case),
+    /// otherwise falls back to parsing the trimmed remainder. Returns nil if
+    /// no complete object is currently parseable. Robust to a missing trailing
+    /// newline — we've observed responses arriving without one in CI, even
+    /// though swift-sdk's send() appends `0x0A`.
+    private func consumeJSONObjectFromBuffer() -> [String: Any]? {
+        if let nlIndex = stdoutBuffer.firstIndex(of: 0x0A) {
+            let line = Data(stdoutBuffer[stdoutBuffer.startIndex..<nlIndex])
+            stdoutBuffer.removeSubrange(stdoutBuffer.startIndex...nlIndex)
+            if line.isEmpty { return nil }
+            return try? JSONSerialization.jsonObject(with: line) as? [String: Any]
         }
+        var candidate = stdoutBuffer
+        while let last = candidate.last, isJSONWhitespace(last) {
+            candidate.removeLast()
+        }
+        guard !candidate.isEmpty,
+              let object = try? JSONSerialization.jsonObject(with: candidate) as? [String: Any]
+        else { return nil }
+        stdoutBuffer.removeAll(keepingCapacity: true)
+        return object
+    }
+
+    private func isJSONWhitespace(_ byte: UInt8) -> Bool {
+        byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
     }
 
     /// Builds a diagnostic snapshot of the child's state for inclusion in
