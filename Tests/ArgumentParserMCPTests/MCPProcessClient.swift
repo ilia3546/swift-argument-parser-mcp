@@ -150,6 +150,25 @@ final class MCPProcessClient: @unchecked Sendable {
         return try await readMessage(matchingID: id, timeout: timeout)
     }
 
+    /// Writes a JSON-RPC request without waiting for the response, returning
+    /// the `id` it was sent with. Used by cancellation tests that need to
+    /// reference an in-flight request from a `notifications/cancelled` payload
+    /// before its response would have arrived.
+    func enqueueRequest(method: String, params: Any? = nil) throws -> Int {
+        nextID += 1
+        let id = nextID
+        var message: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+        ]
+        if let params {
+            message["params"] = params
+        }
+        try writeMessage(message)
+        return id
+    }
+
     /// Sends a JSON-RPC notification (no response expected).
     func notify(method: String, params: Any? = nil) throws {
         var message: [String: Any] = [
