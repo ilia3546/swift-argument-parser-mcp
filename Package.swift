@@ -40,6 +40,7 @@ let package = Package(
             name: "ArgumentParserMCPTests",
             dependencies: [
                 .target(name: "ArgumentParserMCP"),
+                .target(name: "demo-cli"),
                 .product(name: "MCP", package: "swift-sdk")
             ]
         ),
