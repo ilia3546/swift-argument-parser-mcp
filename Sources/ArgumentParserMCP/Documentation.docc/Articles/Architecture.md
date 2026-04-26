@@ -85,11 +85,16 @@ artefacts that ride back in the tool-call response:
   human-readable `text` content block,
 - a **`structuredContent`** object with `exitCode`, `terminationReason`
   (`"exit"` or `"uncaughtSignal"`), `stdoutTruncated`, `stderrTruncated`,
-  and `durationMs`.
+  `stdoutReadFailed`, `stderrReadFailed`, and `durationMs`.
 
 Each stream is capped at the `outputCapBytes` argument of the server
 initializer (default 256 KiB). When the cap is reached, capture stops and
 the corresponding `*Truncated` flag is set so the agent can detect the
 truncation rather than silently receive a partial result.
+
+If reading a pipe fails with an I/O error before EOF, the corresponding
+`*ReadFailed` flag is set and a one-line diagnostic is written to the
+host process's stderr — the captured output is still returned, just
+potentially incomplete.
 
 For failures at any stage of the pipeline, see <doc:Troubleshooting>.
