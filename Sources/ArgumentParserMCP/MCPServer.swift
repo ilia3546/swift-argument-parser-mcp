@@ -2,6 +2,14 @@ import Foundation
 import ArgumentParser
 import MCP
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
+
 /// An MCP server that exposes `MCPCommand`-conforming CLI subcommands as tools.
 ///
 /// The server introspects the current executable via `--experimental-dump-help`,

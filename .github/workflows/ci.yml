@@ -4,15 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build & Test
+  macos:
+    name: macOS
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -24,6 +23,30 @@ jobs:
           path: .build
           key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
           restore-keys: ${{ runner.os }}-spm-
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Run tests
+        run: swift test
+
+  linux:
+    name: Linux (Swift ${{ matrix.swift }})
+    runs-on: ubuntu-latest
+    container: swift:${{ matrix.swift }}-jammy
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.0", "6.1"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
 
       - name: Build
         run: swift build
