@@ -240,7 +240,7 @@ API documentation is generated automatically from source and hosted by Swift Pac
 ## Requirements
 
 - Swift 6.0+
-- macOS 13+
+- macOS 13+ or Linux
 
 ## License
 
