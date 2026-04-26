@@ -292,4 +292,5 @@ sections **by label**. To keep that changelog readable:
 
 Be civil. Assume good faith. Critique code, not people. Reports of harassing
 behaviour can go directly to the maintainers via the contact details on
-their GitHub profile.
+their GitHub profile. The full version lives in
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
