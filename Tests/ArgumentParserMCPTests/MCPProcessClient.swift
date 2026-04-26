@@ -164,8 +164,13 @@ final class MCPProcessClient: @unchecked Sendable {
                     // Notifications or unrelated IDs are ignored.
                 }
             }
-            group.addTask {
+            group.addTask { [self] in
                 try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                // Force-close stdout so the reader's blocking pipe read
+                // returns immediately. Without this, group.cancelAll()
+                // can't unblock a `FileHandle.read(upToCount:)` running on
+                // a dispatch queue, and the task group deadlocks.
+                try? stdout.close()
                 throw MCPClientError.timeout(method: "id=\(id)")
             }
             let result = try await group.next()!
