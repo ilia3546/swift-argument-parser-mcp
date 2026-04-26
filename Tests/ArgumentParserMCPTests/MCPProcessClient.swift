@@ -220,15 +220,20 @@ final class MCPProcessClient: @unchecked Sendable {
 
     private static var productsDirectory: URL {
 #if os(macOS)
-        for bundle in Bundle.allBundles where bundle.bundlePath.hasSuffix(".xctest") {
-            return bundle.bundleURL.deletingLastPathComponent()
-        }
-        return Bundle.main.bundleURL.deletingLastPathComponent()
+        // Resolve the SwiftPM products dir via the test bundle. Under
+        // swift-testing the .xctest bundle isn't always registered in
+        // Bundle.allBundles, but Bundle(for:) with a class anchor in the
+        // test module reliably returns it.
+        return Bundle(for: BundleAnchor.self).bundleURL.deletingLastPathComponent()
 #else
         return Bundle.main.bundleURL
 #endif
     }
 }
+
+/// Class-typed anchor used purely so `Bundle(for:)` can locate the test bundle
+/// on macOS. Must be a class because `Bundle(for:)` is defined on `AnyClass`.
+private final class BundleAnchor {}
 
 // MARK: - MCPClientError
 
