@@ -533,6 +533,54 @@ struct SchemaBuilderTests {
         #expect(seconds["default"]?.doubleValue == 0.25)
     }
 
+    @Test func optionWithBooleanEnumAndUnparseableDefaultOmitsDefault() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "build",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "cached"),
+                    defaultValue: "yes",
+                    allValues: ["true", "false"]
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Build")
+        let cached = tool.inputSchema.objectValue!["properties"]!.objectValue!["cached"]!.objectValue!
+
+        #expect(cached["type"]?.stringValue == "boolean")
+        #expect(cached["default"] == nil)
+    }
+
+    @Test func optionWithIntegerEnumAndUnparseableDefaultOmitsDefault() {
+        let command = DumpCommandInfo(
+            superCommands: ["root"],
+            commandName: "config",
+            arguments: [
+                DumpArgumentInfo(
+                    kind: .option,
+                    shouldDisplay: true,
+                    isOptional: true,
+                    isRepeating: false,
+                    preferredName: DumpNameInfo(kind: .long, name: "level"),
+                    defaultValue: "auto",
+                    allValues: ["0", "1", "2"]
+                ),
+            ]
+        )
+
+        let tool = schemaBuilder.buildTool(from: command, description: "Config")
+        let level = tool.inputSchema.objectValue!["properties"]!.objectValue!["level"]!.objectValue!
+
+        #expect(level["type"]?.stringValue == "integer")
+        #expect(level["default"] == nil)
+    }
+
     @Test func enumValuesPreferIntegerOverNumber() {
         let command = DumpCommandInfo(
             superCommands: ["root"],
