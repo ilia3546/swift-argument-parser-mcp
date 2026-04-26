@@ -1,9 +1,10 @@
 <!--
 Thanks for contributing to ArgumentParserMCP!
 
-Before opening this PR, please skim CLAUDE.md — it is the single source of
-truth for code style, documentation policy, and contribution workflow. The
-checklist below mirrors the "Adding a new feature" checklist from that file.
+Before opening this PR, please skim CONTRIBUTING.md — it is the single
+source of truth for code style, documentation policy, and contribution
+workflow. The checklist below mirrors the "Adding a new feature" checklist
+from that file.
 -->
 
 ## Summary
@@ -27,8 +28,8 @@ exercise something, say so explicitly. -->
 
 ## Checklist
 
-<!-- Mirrors the "Adding a new feature" checklist in CLAUDE.md. Tick the
-items that apply; cross out (`~~item~~`) the ones that don't. -->
+<!-- Mirrors the "Adding a new feature" checklist in CONTRIBUTING.md. Tick
+the items that apply; cross out (`~~item~~`) the ones that don't. -->
 
 - [ ] Implementation lives in `Sources/ArgumentParserMCP/`
 - [ ] Tests added in `Tests/ArgumentParserMCPTests/` (happy path + failure / edge case)
