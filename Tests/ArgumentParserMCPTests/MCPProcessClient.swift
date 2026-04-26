@@ -16,17 +16,12 @@ final class MCPProcessClient: @unchecked Sendable {
         let value: [String: Any]
     }
 
-    /// Thread-safe accumulator for one of the child's output streams.
-    /// Writers append, diagnostic snapshots read.
+    /// Thread-safe accumulator for the child's stderr; used to attach the
+    /// server's log output to timeout / EOF errors.
     private actor StreamCapture {
         private var data = Data()
         func append(_ chunk: Data) { data.append(chunk) }
         func snapshot() -> String { String(decoding: data, as: UTF8.self) }
-        func bytes() -> Int { data.count }
-        func tailHex(count: Int = 16) -> String {
-            let suffix = data.suffix(count)
-            return suffix.map { String(format: "%02x", $0) }.joined(separator: " ")
-        }
     }
 
     // MARK: - Private Properties
@@ -36,7 +31,6 @@ final class MCPProcessClient: @unchecked Sendable {
     private let stdout: FileHandle
     private let stderrDrainer: Task<Void, Never>
     private let stderrCapture: StreamCapture
-    private let stdoutCapture: StreamCapture
     private var stdoutBuffer = Data()
     private var nextID: Int = 0
 
@@ -47,15 +41,13 @@ final class MCPProcessClient: @unchecked Sendable {
         stdin: FileHandle,
         stdout: FileHandle,
         stderrDrainer: Task<Void, Never>,
-        stderrCapture: StreamCapture,
-        stdoutCapture: StreamCapture
+        stderrCapture: StreamCapture
     ) {
         self.process = process
         self.stdin = stdin
         self.stdout = stdout
         self.stderrDrainer = stderrDrainer
         self.stderrCapture = stderrCapture
-        self.stdoutCapture = stdoutCapture
     }
 
     // MARK: - Lifecycle
@@ -93,8 +85,7 @@ final class MCPProcessClient: @unchecked Sendable {
             stdin: stdinPipe.fileHandleForWriting,
             stdout: stdoutPipe.fileHandleForReading,
             stderrDrainer: drainer,
-            stderrCapture: capture,
-            stdoutCapture: StreamCapture()
+            stderrCapture: capture
         )
     }
 
@@ -179,36 +170,35 @@ final class MCPProcessClient: @unchecked Sendable {
             group.addTask { [self] in
                 while true {
                     if let object = consumeJSONObjectFromBuffer() {
-                        let matched = matchesRequest(object, id: id)
-                        debugLog("match-check id=\(id) matched=\(matched) idRaw=\(String(describing: object["id"]))")
-                        if matched {
+                        if matchesRequest(object, id: id) {
                             return ResponseBox(value: object)
                         }
+                        // Notification or unrelated message; keep reading.
                         continue
                     }
                     try Task.checkCancellation()
                     let chunk = try await readChunk()
-                    debugLog("readChunk returned bytes=\(chunk.count)")
                     if chunk.isEmpty {
                         throw MCPClientError.endOfStream(
                             isProcessRunning: process.isRunning,
                             exitCode: process.isRunning ? nil : process.terminationStatus
                         )
                     }
-                    await stdoutCapture.append(chunk)
                     stdoutBuffer.append(chunk)
                 }
             }
             group.addTask { [self] in
                 try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
                 // Force-close stdout so the reader's blocking pipe read
-                // returns immediately. Without this, group.cancelAll()
-                // can't unblock a `FileHandle.read(upToCount:)` running on
-                // a dispatch queue, and the task group deadlocks.
+                // returns immediately. Without this, group.cancelAll() can't
+                // unblock a `FileHandle.availableData` running on a dispatch
+                // queue and the task group deadlocks.
                 try? stdout.close()
                 throw MCPClientError.timeout(
                     method: "id=\(id)",
-                    diagnostics: await diagnosticSnapshot()
+                    stderr: await stderrCapture.snapshot(),
+                    isProcessRunning: process.isRunning,
+                    exitCode: process.isRunning ? nil : process.terminationStatus
                 )
             }
             let result = try await group.next()!
@@ -219,50 +209,25 @@ final class MCPProcessClient: @unchecked Sendable {
     }
 
     /// Tries to consume one complete JSON object from the front of the buffer.
-    /// Strips a leading `\n`-terminated line first (the canonical NDJSON case),
-    /// otherwise falls back to parsing the trimmed remainder. Returns nil if
-    /// no complete object is currently parseable. Robust to a missing trailing
-    /// newline — we've observed responses arriving without one in CI, even
-    /// though swift-sdk's send() appends `0x0A`.
+    /// Prefers a leading `\n`-terminated line (the canonical NDJSON case) and
+    /// falls back to parsing the trimmed remainder, so the harness still works
+    /// if the trailing newline is absent.
     private func consumeJSONObjectFromBuffer() -> [String: Any]? {
         if let nlIndex = stdoutBuffer.firstIndex(of: 0x0A) {
             let line = Data(stdoutBuffer[stdoutBuffer.startIndex..<nlIndex])
             stdoutBuffer.removeSubrange(stdoutBuffer.startIndex...nlIndex)
-            debugLog("nl@\(nlIndex) lineBytes=\(line.count) bufLeft=\(stdoutBuffer.count)")
             if line.isEmpty { return nil }
-            do {
-                let parsed = try JSONSerialization.jsonObject(with: line)
-                if let dict = parsed as? [String: Any] {
-                    debugLog("parsed keys=\(dict.keys.sorted())")
-                    return dict
-                }
-                debugLog("not-a-dict type=\(type(of: parsed))")
-                return nil
-            } catch {
-                debugLog("parse-error: \(error)")
-                return nil
-            }
+            return try? JSONSerialization.jsonObject(with: line) as? [String: Any]
         }
         var candidate = stdoutBuffer
         while let last = candidate.last, isJSONWhitespace(last) {
             candidate.removeLast()
         }
-        guard !candidate.isEmpty else {
-            debugLog("buffer-empty")
-            return nil
-        }
-        guard let object = try? JSONSerialization.jsonObject(with: candidate) as? [String: Any]
-        else {
-            debugLog("fallback-parse-failed bytes=\(candidate.count)")
-            return nil
-        }
+        guard !candidate.isEmpty,
+              let object = try? JSONSerialization.jsonObject(with: candidate) as? [String: Any]
+        else { return nil }
         stdoutBuffer.removeAll(keepingCapacity: true)
-        debugLog("fallback-parsed keys=\(object.keys.sorted())")
         return object
-    }
-
-    private func debugLog(_ message: String) {
-        FileHandle.standardError.write(Data("[mcp-test] \(message)\n".utf8))
     }
 
     private func isJSONWhitespace(_ byte: UInt8) -> Bool {
@@ -271,7 +236,10 @@ final class MCPProcessClient: @unchecked Sendable {
 
     /// Treats `object` as the response to our outstanding request when it
     /// looks like one: it must carry a `result` or `error` member, and (if
-    /// it has an `id` we can read) the id must match.
+    /// it has an `id` we can read) the id must match. Tests are `.serialized`
+    /// so there's only ever one outstanding request per client; this lets us
+    /// tolerate JSONSerialization yielding NSNumber/Double forms of the id
+    /// without breaking the match.
     private func matchesRequest(_ object: [String: Any], id: Int) -> Bool {
         guard object["result"] != nil || object["error"] != nil else {
             return false
@@ -281,23 +249,7 @@ final class MCPProcessClient: @unchecked Sendable {
         if let num = raw as? NSNumber { return num.intValue == id }
         if let dbl = raw as? Double { return Int(dbl) == id }
         if let str = raw as? String, let parsed = Int(str) { return parsed == id }
-        // Couldn't read the id but the structure says it's a response;
-        // for the .serialized one-at-a-time test harness, that's enough.
         return true
-    }
-
-    /// Builds a diagnostic snapshot of the child's state for inclusion in
-    /// timeout/EOF errors. Captures stderr (in case the server logged a
-    /// failure), the running flag, and the exit code if known.
-    private func diagnosticSnapshot() async -> Diagnostics {
-        Diagnostics(
-            stderr: await stderrCapture.snapshot(),
-            stdout: await stdoutCapture.snapshot(),
-            stdoutBytes: await stdoutCapture.bytes(),
-            stdoutTailHex: await stdoutCapture.tailHex(),
-            isProcessRunning: process.isRunning,
-            exitCode: process.isRunning ? nil : process.terminationStatus
-        )
     }
 
     private func readChunk() async throws -> Data {
@@ -306,9 +258,9 @@ final class MCPProcessClient: @unchecked Sendable {
                 // FileHandle.availableData blocks only until the first byte
                 // arrives and then returns whatever is currently buffered.
                 // FileHandle.read(upToCount:) on macOS waits for the full
-                // requested count or EOF on a pipe — for a 267-byte response
-                // with a 4096-byte ask, that means we'd block until the
-                // server (or timeout) closed the stream.
+                // requested count or EOF on a pipe — for a small response
+                // with a 4 KiB ask, that means we'd block until the writer
+                // closed the stream.
                 let data = stdout.availableData
                 continuation.resume(returning: data)
             }
@@ -343,41 +295,13 @@ final class MCPProcessClient: @unchecked Sendable {
 /// on macOS. Must be a class because `Bundle(for:)` is defined on `AnyClass`.
 private final class BundleAnchor {}
 
-// MARK: - Diagnostics
-
-/// Snapshot of the child process state, attached to errors so timeout
-/// failures in CI carry the server's stderr instead of being opaque.
-struct Diagnostics: Sendable {
-    let stderr: String
-    let stdout: String
-    let stdoutBytes: Int
-    let stdoutTailHex: String
-    let isProcessRunning: Bool
-    let exitCode: Int32?
-
-    var formatted: String {
-        let exit = exitCode.map(String.init) ?? "n/a"
-        let tail = stdoutTailHex.isEmpty ? "(empty)" : stdoutTailHex
-        return """
-        running=\(isProcessRunning) exitCode=\(exit) stdoutBytes=\(stdoutBytes) stdoutTailHex=\(tail)
-        stderr=\(format(stderr))
-        stdoutRaw=\(format(stdout, trim: false))
-        """
-    }
-
-    private func format(_ stream: String, trim: Bool = true) -> String {
-        let value = trim ? stream.trimmingCharacters(in: .whitespacesAndNewlines) : stream
-        return value.isEmpty ? "(empty)" : "\n---\n\(value)\n---"
-    }
-}
-
 // MARK: - MCPClientError
 
 enum MCPClientError: Error, CustomStringConvertible {
 
     // MARK: - Cases
 
-    case timeout(method: String, diagnostics: Diagnostics)
+    case timeout(method: String, stderr: String, isProcessRunning: Bool, exitCode: Int32?)
     case endOfStream(isProcessRunning: Bool, exitCode: Int32?)
     case executableNotFound(String)
     case missingField(String)
@@ -387,10 +311,17 @@ enum MCPClientError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .timeout(let method, let diagnostics):
-            return "Timed out waiting for MCP response (\(method)); \(diagnostics.formatted)"
+        case .timeout(let method, let stderr, let running, let code):
+            let exit = code.map(String.init) ?? "n/a"
+            let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stderrSection = trimmed.isEmpty ? "(empty)" : "\n---\n\(trimmed)\n---"
+            return """
+            Timed out waiting for MCP response (\(method)); running=\(running) exitCode=\(exit)
+            stderr=\(stderrSection)
+            """
         case .endOfStream(let running, let code):
-            return "Server closed stdout (running=\(running), exitCode=\(String(describing: code)))"
+            let exit = code.map(String.init) ?? "n/a"
+            return "Server closed stdout (running=\(running), exitCode=\(exit))"
         case .executableNotFound(let path):
             return "demo-cli executable not found at \(path); make sure `swift build` produced it"
         case .missingField(let key):
