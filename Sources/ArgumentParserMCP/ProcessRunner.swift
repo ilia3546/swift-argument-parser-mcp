@@ -84,6 +84,8 @@ final class ProcessRunner: Sendable {
         // completion (observed on macos-15-arm64 CI as a 60s stall).
         let pid = process.processIdentifier
 
+        ProcessRunner.debugLog("run start pid=\(pid) startedAt=\(startedAt.timeIntervalSince1970)")
+
         let result = await withTaskCancellationHandler {
             await ProcessRunner.collectResult(
                 process: process,
@@ -94,8 +96,12 @@ final class ProcessRunner: Sendable {
                 startedAt: startedAt
             )
         } onCancel: {
+            let now = Date().timeIntervalSince1970
+            ProcessRunner.debugLog("onCancel pid=\(pid) at=\(now)")
             if pid > 0 {
-                _ = kill(pid, SIGTERM)
+                let ret = kill(pid, SIGTERM)
+                let savedErrno = errno
+                ProcessRunner.debugLog("onCancel kill ret=\(ret) errno=\(savedErrno)")
             }
         }
 
@@ -152,11 +158,22 @@ final class ProcessRunner: Sendable {
                 return .drain(.stderr, failed)
             }
             group.addTask {
+                let watchStart = Date().timeIntervalSince1970
+                ProcessRunner.debugLog("watchdog start pid=\(pid) at=\(watchStart)")
+                var ticks = 0
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 100_000_000)
+                    ticks += 1
+                    if ticks % 50 == 0 {
+                        ProcessRunner.debugLog("watchdog tick=\(ticks) cancelled=\(Task.isCancelled) elapsed=\(Date().timeIntervalSince1970 - watchStart)")
+                    }
                 }
+                let now = Date().timeIntervalSince1970
+                ProcessRunner.debugLog("watchdog cancellation observed pid=\(pid) ticks=\(ticks) elapsed=\(now - watchStart)")
                 if pid > 0 {
-                    _ = kill(pid, SIGTERM)
+                    let ret = kill(pid, SIGTERM)
+                    let savedErrno = errno
+                    ProcessRunner.debugLog("watchdog kill ret=\(ret) errno=\(savedErrno)")
                 }
                 return .watchdog
             }
@@ -234,6 +251,16 @@ final class ProcessRunner: Sendable {
             }
             guard let chunk, !chunk.isEmpty else { return false }
             await merger.append(stream: stream, chunk: chunk)
+        }
+    }
+
+    /// Temporary CI diagnostic: writes a timestamped line to stderr so the
+    /// CI log captures the cancellation timeline. Will be removed once the
+    /// macos-15-arm64 / Linux 6.0+6.1 cancellation flake is understood.
+    fileprivate static func debugLog(_ message: String) {
+        let line = "[ProcessRunner DEBUG \(Date().timeIntervalSince1970)] \(message)\n"
+        if let data = line.data(using: .utf8) {
+            try? FileHandle.standardError.write(contentsOf: data)
         }
     }
 
