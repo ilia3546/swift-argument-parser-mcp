@@ -67,12 +67,14 @@ final class ProcessRunner: Sendable {
         }
 
         // `withTaskCancellationHandler`'s `onCancel:` closure must be
-        // `@Sendable`, but `Process` is not `Sendable`. The only member we
-        // touch from the cancellation closure is `terminate()`, which
-        // ultimately calls `kill(pid, SIGTERM)` and is safe from any
-        // thread, so we shuttle the reference across in an unchecked
-        // wrapper.
-        let processHandle = ProcessHandle(process: process)
+        // `@Sendable`, but `Process` is not `Sendable`. We only need the
+        // child's pid in the closure, and `pid_t` is `Sendable`, so
+        // capture it directly instead of routing through `Process`.
+        // Avoid `Process.terminate()` / `isRunning`: under load on macOS,
+        // `isRunning` can briefly return false right after spawn, which
+        // would silently skip the SIGTERM and leave the child running to
+        // completion (observed on macos-15-arm64 CI as a 60s stall).
+        let pid = process.processIdentifier
 
         let result = await withTaskCancellationHandler {
             await ProcessRunner.collectResult(
@@ -83,8 +85,8 @@ final class ProcessRunner: Sendable {
                 startedAt: startedAt
             )
         } onCancel: {
-            if processHandle.process.isRunning {
-                processHandle.process.terminate()
+            if pid > 0 {
+                _ = kill(pid, SIGTERM)
             }
         }
 
@@ -203,16 +205,6 @@ final class ProcessRunner: Sendable {
             try? FileHandle.standardError.write(contentsOf: data)
         }
     }
-}
-
-// MARK: - ProcessHandle
-
-/// `@Sendable`-bridge for a `Foundation.Process` so a reference can be
-/// captured by a `withTaskCancellationHandler` `onCancel:` closure.
-/// `Process.terminate()` and `Process.isRunning` are safe to invoke from any
-/// thread, so the unchecked conformance is sound for the narrow use here.
-private struct ProcessHandle: @unchecked Sendable {
-    let process: Process
 }
 
 // MARK: - Spawn Serialization
