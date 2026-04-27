@@ -9,6 +9,14 @@ final class ProcessRunner: Sendable {
         case uncaughtSignal
     }
 
+    /// Discriminator for the heterogeneous task group inside ``collectResult(process:pid:stdoutPipe:stderrPipe:perStreamCapBytes:startedAt:)``.
+    /// Two cases carry the per-stream drain result; the third lets the
+    /// cancellation watchdog return without confusing the result tally.
+    private enum TaskOutcome: Sendable {
+        case drain(StreamMerger.Stream, Bool)
+        case watchdog
+    }
+
     struct Result: Sendable {
         let stdout: String
         let stderr: String
@@ -79,6 +87,7 @@ final class ProcessRunner: Sendable {
         let result = await withTaskCancellationHandler {
             await ProcessRunner.collectResult(
                 process: process,
+                pid: pid,
                 stdoutPipe: stdoutPipe,
                 stderrPipe: stderrPipe,
                 perStreamCapBytes: perStreamCapBytes,
@@ -101,8 +110,20 @@ final class ProcessRunner: Sendable {
     /// `withTaskCancellationHandler` is a single `await` — keeps the
     /// non-`Sendable` `Pipe` references off the cancellation-handler
     /// boundary.
+    ///
+    /// A third "watchdog" task is added to the same task group: it polls
+    /// `Task.isCancelled` every 100ms and sends `SIGTERM` to `pid` when it
+    /// observes cancellation. This is a backstop for
+    /// `withTaskCancellationHandler.onCancel`, which has been observed not
+    /// to terminate the child reliably on swift-corelibs-foundation Linux
+    /// and on macos-15-arm64 CI (a 60s stall on `sleep 60` despite a
+    /// successful `task.cancel()`). The watchdog polls inside the task
+    /// group's cancellation context — when the surrounding `Task` is
+    /// cancelled, every group child is marked cancelled, and `Task.sleep`
+    /// returns immediately.
     private static func collectResult(
         process: Process,
+        pid: pid_t,
         stdoutPipe: Pipe,
         stderrPipe: Pipe,
         perStreamCapBytes: Int,
@@ -111,7 +132,7 @@ final class ProcessRunner: Sendable {
         let merger = StreamMerger(perStreamCapBytes: perStreamCapBytes)
 
         let readFailures = await withTaskGroup(
-            of: (StreamMerger.Stream, Bool).self,
+            of: TaskOutcome.self,
             returning: (stdout: Bool, stderr: Bool).self
         ) { group in
             group.addTask {
@@ -120,7 +141,7 @@ final class ProcessRunner: Sendable {
                     stream: .stdout,
                     into: merger
                 )
-                return (.stdout, failed)
+                return .drain(.stdout, failed)
             }
             group.addTask {
                 let failed = await ProcessRunner.drain(
@@ -128,15 +149,37 @@ final class ProcessRunner: Sendable {
                     stream: .stderr,
                     into: merger
                 )
-                return (.stderr, failed)
+                return .drain(.stderr, failed)
+            }
+            group.addTask {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                if pid > 0 {
+                    _ = kill(pid, SIGTERM)
+                }
+                return .watchdog
             }
 
             var stdoutFailed = false
             var stderrFailed = false
-            for await (stream, failed) in group {
-                switch stream {
-                case .stdout: stdoutFailed = failed
-                case .stderr: stderrFailed = failed
+            var drainsDone = 0
+            for await outcome in group {
+                switch outcome {
+                case .drain(.stdout, let failed):
+                    stdoutFailed = failed
+                    drainsDone += 1
+                case .drain(.stderr, let failed):
+                    stderrFailed = failed
+                    drainsDone += 1
+                case .watchdog:
+                    break
+                }
+                if drainsDone == 2 {
+                    // Both drains have EOFed; cancel the watchdog so the
+                    // group can finish (the watchdog task will return
+                    // immediately on its next loop iteration).
+                    group.cancelAll()
                 }
             }
             return (stdoutFailed, stderrFailed)
