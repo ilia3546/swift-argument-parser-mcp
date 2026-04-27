@@ -1,5 +1,7 @@
 import Foundation
 
+@testable import ArgumentParserMCP
+
 // MARK: - MCPProcessClient
 
 /// Test harness that drives a child `demo-cli mcp` process as a JSON-RPC client
@@ -68,14 +70,20 @@ final class MCPProcessClient: @unchecked Sendable {
         process.executableURL = try demoCLIURL()
         process.arguments = ["mcp"]
 
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        try process.run()
+        let (stdinPipe, stdoutPipe, stderrPipe) = try withProcessSpawnLock { () -> (Pipe, Pipe, Pipe) in
+            let stdin = Pipe()
+            let stdout = Pipe()
+            let stderr = Pipe()
+            for pipe in [stdin, stdout, stderr] {
+                markCloseOnExec(pipe.fileHandleForReading.fileDescriptor)
+                markCloseOnExec(pipe.fileHandleForWriting.fileDescriptor)
+            }
+            process.standardInput = stdin
+            process.standardOutput = stdout
+            process.standardError = stderr
+            try process.run()
+            return (stdin, stdout, stderr)
+        }
 
         // Drain stderr (so the server doesn't block on a full pipe buffer)
         // and capture it for diagnostics on timeout / error.

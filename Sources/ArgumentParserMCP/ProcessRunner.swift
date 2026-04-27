@@ -49,15 +49,22 @@ final class ProcessRunner: Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
         process.standardInput = FileHandle.nullDevice
 
-        let startedAt = Date()
-        try process.run()
+        let (stdoutPipe, stderrPipe, startedAt) = try withProcessSpawnLock { () -> (Pipe, Pipe, Date) in
+            let stdout = Pipe()
+            let stderr = Pipe()
+            markCloseOnExec(stdout.fileHandleForReading.fileDescriptor)
+            markCloseOnExec(stdout.fileHandleForWriting.fileDescriptor)
+            markCloseOnExec(stderr.fileHandleForReading.fileDescriptor)
+            markCloseOnExec(stderr.fileHandleForWriting.fileDescriptor)
+            process.standardOutput = stdout
+            process.standardError = stderr
+
+            let started = Date()
+            try process.run()
+            return (stdout, stderr, started)
+        }
 
         // `withTaskCancellationHandler`'s `onCancel:` closure must be
         // `@Sendable`, but `Process` is not `Sendable`. The only member we
@@ -206,4 +213,45 @@ final class ProcessRunner: Sendable {
 /// thread, so the unchecked conformance is sound for the narrow use here.
 private struct ProcessHandle: @unchecked Sendable {
     let process: Process
+}
+
+// MARK: - Spawn Serialization
+
+/// Serializes `Pipe()` creation + `FD_CLOEXEC` tagging + `Process.run()`
+/// across every spawn in the package.
+///
+/// `Foundation.Pipe` does not set `FD_CLOEXEC` on the file descriptors it
+/// returns from `pipe(2)`, so a concurrent `posix_spawn` from another thread
+/// can inherit the parent-side pipe ends of an unrelated child. The
+/// inherited write-ends keep the unrelated pipe open even after its real
+/// child exits, blocking the parent's `read` until the *other* (potentially
+/// long-running) child exits — observed on `macos-15-arm64` CI as a 60s stall
+/// in `cancellingTaskTerminatesLongRunningChild`. Holding this lock around
+/// the pipe-creation + `Process.run()` block makes the otherwise interleaved
+/// sequence atomic with respect to other spawn sites in this package,
+/// including the `MCPProcessClient` test harness.
+private let processSpawnLock = NSLock()
+
+/// Runs `body` while holding ``processSpawnLock``. Synchronous so the lock
+/// is never held across an `await` — `NSLock.lock()` is unavailable in
+/// asynchronous contexts under Swift 6 strict concurrency.
+internal func withProcessSpawnLock<T>(_ body: () throws -> T) rethrows -> T {
+    processSpawnLock.lock()
+    defer { processSpawnLock.unlock() }
+    return try body()
+}
+
+/// Sets `FD_CLOEXEC` on `fd` so the descriptor is closed automatically on
+/// the next `exec(2)` in *this* process.
+///
+/// `Process.run()` uses `posix_spawn_file_actions_adddup2` to map our pipe
+/// write-end onto the child's stdout/stderr. `dup2` clears the close-on-exec
+/// flag on the destination fd, so the child still inherits its three
+/// redirected streams even though the original parent-side fd is now
+/// `FD_CLOEXEC`.
+internal func markCloseOnExec(_ fd: Int32) {
+    let flags = fcntl(fd, F_GETFD)
+    if flags >= 0 {
+        _ = fcntl(fd, F_SETFD, flags | FD_CLOEXEC)
+    }
 }
