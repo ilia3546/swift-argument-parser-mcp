@@ -3,7 +3,15 @@ import Testing
 
 @testable import ArgumentParserMCP
 
-@Suite("ProcessRunner")
+/// Serialized so the two cases never spawn `Process`es concurrently. Swift
+/// Testing parallelises tests within a suite by default, but `Foundation.Pipe`
+/// does not set `O_CLOEXEC` and `FileHandle.read(upToCount:)` blocks the
+/// cooperative thread pool — under parallel runs on small CI runners, one
+/// test's pipe write-ends leak into the other's child and both drain reads
+/// block on the long-running `sleep 60` instead of EOFing when their own
+/// children exit. `MCPServerIntegrationTests` is `.serialized` for the same
+/// underlying reason.
+@Suite("ProcessRunner", .serialized)
 struct ProcessRunnerTests {
 
     // MARK: - Cancellation
