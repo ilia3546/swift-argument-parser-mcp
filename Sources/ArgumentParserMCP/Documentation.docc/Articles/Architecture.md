@@ -97,4 +97,23 @@ If reading a pipe fails with an I/O error before EOF, the corresponding
 host process's stderr — the captured output is still returned, just
 potentially incomplete.
 
+## Cancellation
+
+When the agent sends `notifications/cancelled` for an in-flight `tools/call`,
+the MCP SDK cancels the Swift `Task` running the tool's handler. The library
+surfaces that cancellation to the spawned child:
+
+1. A cancellation handler installed inside `ProcessRunner.run(...)` sends
+   `SIGTERM` to the child as soon as the task is cancelled. If the child
+   blocks or ignores `SIGTERM`, `ProcessRunner` sends `SIGKILL` after a short
+   grace period. Once the child exits, the stdout/stderr pipes hit EOF and the
+   stream-drain tasks return naturally.
+2. After the drain completes, `ProcessRunner` rethrows `CancellationError`
+   so the SDK suppresses the tool-call response — the MCP cancellation
+   spec requires that no response is sent for a cancelled request.
+
+Long-running tools therefore stop consuming CPU and file descriptors shortly
+after the agent loses interest, instead of running to completion in the
+background.
+
 For failures at any stage of the pipeline, see <doc:Troubleshooting>.
