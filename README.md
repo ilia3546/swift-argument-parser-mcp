@@ -5,6 +5,7 @@
 [![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Filia3546%2Fswift-argument-parser-mcp%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/ilia3546/swift-argument-parser-mcp)
 [![Documentation](https://img.shields.io/badge/documentation-SPI-blue)](https://swiftpackageindex.com/ilia3546/swift-argument-parser-mcp/documentation)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Support on Boosty](https://img.shields.io/badge/support-Boosty-f15f2c?logo=boosty&logoColor=white)](https://boosty.to/ilia3546/donate)
 
 **Turn any Swift CLI into an MCP server in minutes.**
 
